@@ -1,0 +1,2 @@
+fn add -> result
+let a = 123 * 456
