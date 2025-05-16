@@ -1,6 +1,7 @@
 //fn add -> result
 let a = 10 * 456
 print(a)
+//print("TEST")
 
 // cascade
 /*let b = 1

@@ -2,8 +2,14 @@ use std::collections::HashMap;
 
 use crate::parser::ast::*;
 
+#[derive(Debug, Clone)]
+enum Value {
+    Int(i64),
+    Null,
+}
+
 pub struct Interpreter {
-    env: std::collections::HashMap<String, i64>,
+    env: std::collections::HashMap<String, Value>,
 }
 
 impl Interpreter {
@@ -22,45 +28,51 @@ impl Interpreter {
                 }
                 Stmt::Expr(expr) => {
                     let val = self.eval_expr(expr);
-                    println!("=> {}", val);
+                    println!("=> {:?}", val);
                 }
             }
         }
     }
 
-    fn eval_expr(&self, expr: Expr) -> i64 {
+    fn eval_expr(&self, expr: Expr) -> Value {
         match expr {
-            Expr::Number(n) => n,
-            Expr::Identifier(id) => *self
+            Expr::Number(n) => Value::Int(n),
+            Expr::Identifier(id) => self
                 .env
                 .get(&id)
-                .expect(&format!("Undefined Identifier : {}", id)),
+                .cloned()
+                .expect(&format!("Undefined Identifier: {}", id)),
             Expr::BinaryOp { left, op, right } => {
                 let l = self.eval_expr(*left);
                 let r = self.eval_expr(*right);
-                match op {
-                    BinaryOp::Plus => l + r,
-                    BinaryOp::Minus => l - r,
-                    BinaryOp::Star => l * r,
-                    BinaryOp::Slash => l / r,
+                match (l, r) {
+                    (Value::Int(lv), Value::Int(rv)) => {
+                        let result = match op {
+                            BinaryOp::Plus => lv + rv,
+                            BinaryOp::Minus => lv - rv,
+                            BinaryOp::Star => lv * rv,
+                            BinaryOp::Slash => lv / rv,
+                        };
+                        Value::Int(result)
+                    }
+                    _ => panic!("Type error in binary operation"),
                 }
             }
             Expr::Call { callee, args } => {
                 // on ne gère que print pour l'instant
                 if let Expr::Identifier(name) = *callee {
-                    let vals: Vec<i64> = args.into_iter().map(|arg| self.eval_expr(arg)).collect();
+                    let vals: Vec<Value> =
+                        args.into_iter().map(|arg| self.eval_expr(arg)).collect();
                     if name == "print" {
-                        // affiche tous les args, un par un
-                        for v in &vals {
-                            println!("{}", v);
+                        for val in &vals {
+                            println!("{:?}", val);
                         }
-                        // retourner une valeur neutre (ici 0)
-                        0
+                        Value::Null
                     } else {
                         panic!("Unknown function `{}`", name);
                     }
                 } else {
-                    panic!("Cannot call non‑identifier expression");
+                    panic!("Cannot call non-identifier expression");
                 }
             }
         }
