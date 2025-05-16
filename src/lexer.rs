@@ -15,15 +15,21 @@ pub enum Token {
     #[regex(r#""([^"\\]|\\.)*""#, |lex| lex.slice()[1..lex.slice().len()-1].to_string())]
     StringLiteral(String),
 
+    #[token("Int")]
+    IntType,
+    #[token("String")]
+    StringType,
+
     #[token("fn")]
     Fn,
-    #[token("let")]
-    Let,
-
     #[token("->")]
     Arrow,
     #[token(",")]
     Comma,
+    #[token(":")]
+    Colon,
+    #[token("let")]
+    Let,
 
     #[token("+")]
     Plus,

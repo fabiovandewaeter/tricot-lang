@@ -1,4 +1,4 @@
-use crate::lexer::Token;
+use crate::{lexer::Token, types::Type};
 
 use super::ast::{BinaryOp, Expr, Function, Program, Stmt};
 
@@ -53,9 +53,10 @@ impl Parser {
         Some(Program { statements: stmts })
     }
 
+    // CHANGER LE TYPE DE RETOURN EN Result<Stmt, String> JE PENSE
     pub fn parse_statement(&mut self) -> Option<Stmt> {
         if let Some(Token::Let) = self.peek() {
-            self.next(); // consume 'let'
+            self.next();
             if let Some(Token::Identifier(name)) = self.next() {
                 self.expect(Token::Assign)?;
                 let expr = self.parse_expression(0)?;
@@ -64,30 +65,47 @@ impl Parser {
                 return None; // erreur: identifiant attendu
             }
         } else if let Some(Token::Fn) = self.peek() {
-            self.next(); // Consommer 'fn'
+            // prase function
+            self.next();
             let name = match self.next()? {
                 Token::Identifier(name) => name,
                 _ => return None, // Erreur: nom attendu
             };
             self.expect(Token::ParenthesisOpen)?;
+
+            // parse parameters
             let mut params = Vec::new();
             while self.peek() != Some(&Token::ParenthesisClose) {
-                if let Some(Token::Identifier(param)) = self.next() {
-                    params.push(param);
-                } else {
-                    return None; // Erreur: paramètre attendu
-                }
+                let param_name = match self.next()? {
+                    Token::Identifier(name) => name,
+                    _ => return None,
+                };
+                self.expect(Token::Colon)?;
+                let param_type = Type::get_type(self.next()?).unwrap();
+                params.push((param_name, param_type));
+
                 if self.peek() == Some(&Token::Comma) {
                     self.next();
                 }
             }
             self.expect(Token::ParenthesisClose)?;
+
+            // parse return type
+            let return_type = if self.peek() == Some(&Token::Arrow) {
+                self.expect(Token::Arrow)?;
+                Type::get_type(self.next()?).unwrap()
+            } else {
+                Type::Null // Null if no return type
+            };
+
             self.expect(Token::CurlyBraceOpen)?;
-            let body = self.parse_program(true)?; // Parse jusqu'à '}'
+            let body = self.parse_program(true)?;
             self.expect(Token::CurlyBraceClose)?;
+
             Some(Stmt::Function(Function {
                 name,
                 params,
+                return_type,
                 body: body.statements,
             }))
         } else {

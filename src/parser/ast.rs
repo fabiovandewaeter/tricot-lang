@@ -1,3 +1,5 @@
+use crate::types::Type;
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     Number(i64),
@@ -32,7 +34,8 @@ pub enum Stmt {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
-    pub params: Vec<String>,
+    pub params: Vec<(String, Type)>,
+    pub return_type: Type,
     pub body: Vec<Stmt>,
 }
 
