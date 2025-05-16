@@ -1,9 +1,11 @@
 use std::{env, error::Error, fs};
 
+use interpreter::interpreter::Interpreter;
 use lexer::Token;
 use logos::{Lexer, Logos};
-use parser::parser::Parser;
+use parser::{ast::Program, parser::Parser};
 
+mod interpreter;
 mod lexer;
 mod parser;
 
@@ -22,7 +24,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     //print_tokens(&mut lexer);
     let tokens: Vec<Token> = lexer.map(|r| r.expect("Erreur de lexing")).collect();
     let mut parser = Parser::new(tokens);
-    print_ast(&mut parser);
+    let program = parser.parse_program();
+    match program {
+        Some(prog) => {
+            println!("AST :\n{:#?}", prog);
+            let mut interpreter = Interpreter::new();
+            interpreter.run(prog);
+        }
+        None => {
+            eprintln!("Error during parsing");
+        }
+    }
 
     Ok(())
 }
@@ -32,18 +44,6 @@ fn print_tokens(lexer: &mut Lexer<'_, Token>) {
         match token {
             Ok(tok) => println!("Token: {:?} (span: {:?})", tok, lexer.span()),
             Err(_) => println!("Erreur de lexing à {:?}", lexer.span()),
-        }
-    }
-}
-
-fn print_ast(parser: &mut Parser) {
-    match parser.parse_program() {
-        Some(prog) => {
-            println!("AST complet :\n{:#?}", prog);
-            // ici tu peux appeler ton interpréteur ou générateur de code
-        }
-        None => {
-            eprintln!("Échec du parsing, programme invalide.");
         }
     }
 }
