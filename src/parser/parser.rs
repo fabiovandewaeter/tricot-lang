@@ -1,6 +1,6 @@
 use crate::lexer::Token;
 
-use super::ast::{BinaryOp, Expr, Program, Stmt};
+use super::ast::{BinaryOp, Expr, Function, Program, Stmt};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -26,7 +26,7 @@ impl Parser {
     }
 
     /// Parse all statements until EOF or closing brace
-    pub fn parse_program(&mut self) -> Option<Program> {
+    pub fn parse_program(&mut self, in_block: bool) -> Option<Program> {
         let mut stmts = Vec::new();
         loop {
             // clone peeked token to avoid borrowing self across the loop
@@ -34,9 +34,12 @@ impl Parser {
                 Some(t) => t.clone(),
                 None => break,
             };
-            if tok == Token::CurlyBraceClose {
+
+            // Arrêter seulement si c'est un bloc et qu'on trouve '}'
+            if in_block && tok == Token::CurlyBraceClose {
                 break;
             }
+
             if let Some(stmt) = self.parse_statement() {
                 stmts.push(stmt);
             } else {
@@ -60,9 +63,36 @@ impl Parser {
             } else {
                 return None; // erreur: identifiant attendu
             }
+        } else if let Some(Token::Fn) = self.peek() {
+            self.next(); // Consommer 'fn'
+            let name = match self.next()? {
+                Token::Identifier(name) => name,
+                _ => return None, // Erreur: nom attendu
+            };
+            self.expect(Token::ParenthesisOpen)?;
+            let mut params = Vec::new();
+            while self.peek() != Some(&Token::ParenthesisClose) {
+                if let Some(Token::Identifier(param)) = self.next() {
+                    params.push(param);
+                } else {
+                    return None; // Erreur: paramètre attendu
+                }
+                if self.peek() == Some(&Token::Comma) {
+                    self.next();
+                }
+            }
+            self.expect(Token::ParenthesisClose)?;
+            self.expect(Token::CurlyBraceOpen)?;
+            let body = self.parse_program(true)?; // Parse jusqu'à '}'
+            self.expect(Token::CurlyBraceClose)?;
+            Some(Stmt::Function(Function {
+                name,
+                params,
+                body: body.statements,
+            }))
+        } else {
+            self.parse_expression(0).map(Stmt::Expr)
         }
-        // sinon, on parse une expression
-        self.parse_expression(0).map(Stmt::Expr)
     }
 
     /// Vérifie que le token suivant correspond à `expected`, sinon None.

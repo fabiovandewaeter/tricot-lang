@@ -2,7 +2,7 @@ use std::{env, error::Error, fs};
 
 use interpreter::interpreter::Interpreter;
 use lexer::Token;
-use logos::{Lexer, Logos};
+use logos::Logos;
 use parser::parser::Parser;
 
 mod interpreter;
@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let tokens: Vec<Token> = tokens_with_span.into_iter().map(|(tok, _)| tok).collect();
 
     let mut parser = Parser::new(tokens);
-    let program = parser.parse_program();
+    let program = parser.parse_program(false);
 
     match program {
         Some(prog) => {

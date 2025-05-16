@@ -1,7 +1,10 @@
-//fn add -> result
-let a = 10 * 456
-print(a)
-print("TEST")
+fn main(){
+    let a = 10 * 456
+    print(a + 1)
+    print("TEST")
+}
+
+main()
 
 // cascade
 /*let b = 1

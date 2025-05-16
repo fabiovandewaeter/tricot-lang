@@ -26,16 +26,17 @@ pub enum BinaryOp {
 pub enum Stmt {
     Expr(Expr),
     Let { name: String, value: Expr },
+    Function(Function),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
     pub params: Vec<String>,
     pub body: Vec<Stmt>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Program {
     pub statements: Vec<Stmt>,
 }
