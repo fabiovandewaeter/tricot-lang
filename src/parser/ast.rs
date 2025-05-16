@@ -1,9 +1,8 @@
-use crate::lexer::Token;
-
 #[derive(Debug, Clone)]
 pub enum Expr {
     Number(i64),
     Identifier(String),
+    StringLiteral(String),
     BinaryOp {
         left: Box<Expr>,
         op: BinaryOp,

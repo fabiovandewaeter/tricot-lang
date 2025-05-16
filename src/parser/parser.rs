@@ -40,7 +40,10 @@ impl Parser {
             if let Some(stmt) = self.parse_statement() {
                 stmts.push(stmt);
             } else {
-                eprintln!("Erreur de parsing au token {:?} (pos {})", tok, self.pos);
+                eprintln!(
+                    "Error during parsing for token {:?} (pos {})",
+                    tok, self.pos
+                );
                 return None;
             }
         }
@@ -78,6 +81,7 @@ impl Parser {
         let mut lhs = match self.next()? {
             Token::Number(n) => Expr::Number(n.parse().ok()?),
             Token::Identifier(id) => Expr::Identifier(id),
+            Token::StringLiteral(string_literal) => Expr::StringLiteral(string_literal),
             Token::ParenthesisOpen => {
                 let expr = self.parse_expression(0)?;
                 self.expect(Token::ParenthesisClose)?;

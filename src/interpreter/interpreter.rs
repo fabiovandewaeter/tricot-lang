@@ -1,12 +1,6 @@
 use std::collections::HashMap;
 
-use crate::parser::ast::*;
-
-#[derive(Debug, Clone)]
-enum Value {
-    Int(i64),
-    Null,
-}
+use crate::{parser::ast::*, values::Value};
 
 pub struct Interpreter {
     env: std::collections::HashMap<String, Value>,
@@ -42,6 +36,7 @@ impl Interpreter {
                 .get(&id)
                 .cloned()
                 .expect(&format!("Undefined Identifier: {}", id)),
+            Expr::StringLiteral(string_literal) => Value::String(string_literal),
             Expr::BinaryOp { left, op, right } => {
                 let l = self.eval_expr(*left);
                 let r = self.eval_expr(*right);
@@ -59,7 +54,6 @@ impl Interpreter {
                 }
             }
             Expr::Call { callee, args } => {
-                // on ne gère que print pour l'instant
                 if let Expr::Identifier(name) = *callee {
                     let vals: Vec<Value> =
                         args.into_iter().map(|arg| self.eval_expr(arg)).collect();
