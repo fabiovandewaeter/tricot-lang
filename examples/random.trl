@@ -1,0 +1,25 @@
+//fn add -> result
+let a = 123 * 456
+
+// cascade
+/*let b = 1
+    add(1);
+    add(1);
+    yourself
+
+let c = 1
+    -> add(1)
+    -> add(1)
+    -> yourself
+
+let d = 1
+    <- add(1)
+    <- add(1)
+    <- yourself*/
+
+// pipeline
+/*let player =
+  Entity()
+  |> add(Position(10, 5))
+  |> add(Health(100, 100))
+  |> yourself*/

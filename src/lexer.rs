@@ -1,14 +1,17 @@
 use logos::Logos;
 
-#[derive(Logos, Debug, PartialEq)]
+#[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
     #[regex(r"[ \t\n\f]+", logos::skip)]
     Whitespace,
+    #[regex(r"//.*", logos::skip)] // one line with // or ///
+    #[regex(r"/\*([^*]|\*[^/])*\*/", logos::skip)] // multiple lines with /**/
+    Comment,
 
-    #[regex(r"[0-9]+")]
-    Number,
-    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*")]
-    Identifier,
+    #[regex(r"[0-9]+", |lex| lex.slice().to_string())]
+    Number(String),
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
+    Identifier(String),
 
     #[token("fn")]
     Fn,
