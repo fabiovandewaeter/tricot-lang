@@ -20,6 +20,8 @@ pub enum Token {
 
     #[token("->")]
     Arrow,
+    #[token(",")]
+    Comma,
 
     #[token("+")]
     Plus,

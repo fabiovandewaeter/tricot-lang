@@ -45,7 +45,24 @@ impl Interpreter {
                     BinaryOp::Slash => l / r,
                 }
             }
-            Expr::Call { callee, args } => todo!(),
+            Expr::Call { callee, args } => {
+                // on ne gère que print pour l'instant
+                if let Expr::Identifier(name) = *callee {
+                    let vals: Vec<i64> = args.into_iter().map(|arg| self.eval_expr(arg)).collect();
+                    if name == "print" {
+                        // affiche tous les args, un par un
+                        for v in &vals {
+                            println!("{}", v);
+                        }
+                        // retourner une valeur neutre (ici 0)
+                        0
+                    } else {
+                        panic!("Unknown function `{}`", name);
+                    }
+                } else {
+                    panic!("Cannot call non‑identifier expression");
+                }
+            }
         }
     }
 }

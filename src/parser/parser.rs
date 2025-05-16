@@ -86,6 +86,32 @@ impl Parser {
             _ => return None,
         };
 
+        // 2) suffixe d’appels : tant qu’on voit une parenthèse, on collecte args
+        loop {
+            if let Some(Token::ParenthesisOpen) = self.peek() {
+                self.next(); // consume '('
+                let mut args = Vec::new();
+                // s’il n’y a pas tout de suite ')', on parse des args séparés par des ','
+                if self.peek() != Some(&Token::ParenthesisClose) {
+                    loop {
+                        args.push(self.parse_expression(0)?);
+                        if self.peek() == Some(&Token::Comma) {
+                            self.next(); // consume ','
+                            continue;
+                        }
+                        break;
+                    }
+                }
+                self.expect(Token::ParenthesisClose)?;
+                lhs = Expr::Call {
+                    callee: Box::new(lhs),
+                    args,
+                };
+            } else {
+                break;
+            }
+        }
+
         // boucle pour les opérateurs de plus faible à plus fort
         while let Some(op_tok) = self.peek() {
             if let Some((prec, right_assoc)) = precedence(op_tok) {
