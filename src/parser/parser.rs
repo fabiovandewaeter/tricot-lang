@@ -190,6 +190,25 @@ impl Parser {
         }
         Some(lhs)
     }
+
+    fn parse_type(&mut self) -> Result<Type, String> {
+        if self.peek() == Some(&Token::Ampersand) {
+            self.next();
+            let mutable = if self.peek() == Some(&Token::Mut) {
+                self.next();
+                true
+            } else {
+                false
+            };
+            let inner_type = self.parse_type()?;
+            Ok(Type::Reference {
+                inner: Box::new(inner_type),
+                mutable: mutable,
+            })
+        } else {
+            Type::get_type(self.next().unwrap())
+        }
+    }
 }
 
 /// Définition des priorités : plus le nombre est élevé, plus la liaison est forte.
