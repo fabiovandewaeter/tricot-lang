@@ -1,15 +1,30 @@
-use crate::{lexer::Token, types::Type};
+use std::collections::HashMap;
+
+use crate::{lexer::Token, types::types::Type};
 
 use super::ast::{BinaryOp, Expr, Function, Program, Stmt};
 
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    functions: HashMap<String, Function>,
 }
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, pos: 0 }
+        let print_function = Function {
+            name: "print".into(),
+            params: vec![("value".into(), Type::String)],
+            return_type: Type::Null,
+            body: Vec::new(),
+        };
+        let mut functions = HashMap::new();
+        functions.insert("print".into(), print_function);
+        Self {
+            tokens,
+            pos: 0,
+            functions,
+        }
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -57,10 +72,20 @@ impl Parser {
     pub fn parse_statement(&mut self) -> Option<Stmt> {
         if let Some(Token::Let) = self.peek() {
             self.next();
+            let mut mutable = false;
+            if let Some(Token::Mut) = self.peek() {
+                mutable = true;
+                self.next();
+            }
             if let Some(Token::Identifier(name)) = self.next() {
                 self.expect(Token::Assign)?;
                 let expr = self.parse_expression(0)?;
-                return Some(Stmt::Let { name, value: expr });
+                return Some(Stmt::Let {
+                    mutable,
+                    name,
+                    expression: expr,
+                    expected_type: Type::UNDEFINED,
+                });
             } else {
                 return None; // erreur: identifiant attendu
             }
@@ -102,12 +127,14 @@ impl Parser {
             let body = self.parse_program(true)?;
             self.expect(Token::CurlyBraceClose)?;
 
-            Some(Stmt::Function(Function {
-                name,
+            let function = Function {
+                name: name.clone(),
                 params,
                 return_type,
                 body: body.statements,
-            }))
+            };
+            self.functions.insert(name.clone(), function.clone());
+            Some(Stmt::Function(function))
         } else {
             self.parse_expression(0).map(Stmt::Expr)
         }

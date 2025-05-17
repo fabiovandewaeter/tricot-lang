@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{parser::ast::*, types::Type, values::Value};
+use crate::{parser::ast::*, types::types::Type, values::Value};
 
 pub struct Interpreter {
     env: std::collections::HashMap<String, Value>,
@@ -31,12 +31,17 @@ impl Interpreter {
     fn eval_expr(&mut self, expr: Expr) -> Value {
         match expr {
             Expr::Number(n) => Value::Int(n),
+
             Expr::Identifier(id) => self
                 .env
                 .get(&id)
                 .cloned()
                 .expect(&format!("Undefined Identifier: {}", id)),
+
             Expr::StringLiteral(string_literal) => Value::String(string_literal),
+
+            Expr::UnaryOp { op, expr } => todo!(),
+
             Expr::BinaryOp { left, op, right } => {
                 let l = self.eval_expr(*left);
                 let r = self.eval_expr(*right);
@@ -53,6 +58,7 @@ impl Interpreter {
                     _ => panic!("Type error in binary operation"),
                 }
             }
+
             Expr::Call { callee, args } => {
                 if let Expr::Identifier(name) = *callee {
                     if name == "print" {
@@ -65,7 +71,10 @@ impl Interpreter {
                     } else {
                         // 1. Extraire les données de la fonction avant toute mutation
                         let (params, return_type, body) = {
-                            let func = self.functions.get(&name).unwrap();
+                            let func = self
+                                .functions
+                                .get(&name)
+                                .expect(&format!("Function '{}' not found", name));
                             (
                                 func.params.clone(),
                                 func.return_type.clone(),
@@ -101,9 +110,14 @@ impl Interpreter {
                         let mut return_value = Value::Null;
                         for stmt in body {
                             match stmt {
-                                Stmt::Let { name, value } => {
+                                Stmt::Let {
+                                    mutable,
+                                    name,
+                                    expected_type,
+                                    expression,
+                                } => {
                                     // Exécuter les déclarations let
-                                    let val = self.eval_expr(value);
+                                    let val = self.eval_expr(expression);
                                     self.env.insert(name, val);
                                 }
                                 Stmt::Expr(e) => {
@@ -141,13 +155,16 @@ impl Interpreter {
 
     fn run_stmt(&mut self, stmt: Stmt) {
         match stmt {
-            Stmt::Let { name, value } => {
-                let val = self.eval_expr(value);
+            Stmt::Let {
+                mutable,
+                name,
+                expected_type,
+                expression,
+            } => {
+                let val = self.eval_expr(expression);
                 self.env.insert(name, val);
             }
             Stmt::Expr(expr) => {
-                /*let val = self.eval_expr(expr);
-                println!("=> {:?}", val);*/
                 if !self.in_function {
                     let val = self.eval_expr(expr);
                     println!("=> {:?}", val);

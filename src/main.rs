@@ -4,6 +4,7 @@ use interpreter::interpreter::Interpreter;
 use lexer::Token;
 use logos::Logos;
 use parser::parser::Parser;
+use types::type_checker::TypeChecker;
 
 mod interpreter;
 mod lexer;
@@ -38,11 +39,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut parser = Parser::new(tokens);
     let program = parser.parse_program(false);
+    let mut type_checker = TypeChecker::new();
 
     match program {
-        Some(prog) => {
+        Some(mut prog) => {
+            // check types
+            let _ = type_checker.check(&mut prog)?;
+
+            // display Program
             println!("AST :\n{:#?}", prog);
             println!("\n===========\n");
+
+            // use the interpreter
             let mut interpreter = Interpreter::new();
             interpreter.run(prog);
         }

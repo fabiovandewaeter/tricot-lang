@@ -6,6 +6,7 @@ pub enum Type {
     Int,
     String,
     Reference { inner: Box<Type>, mutable: bool },
+    UNDEFINED,
 }
 
 impl Type {

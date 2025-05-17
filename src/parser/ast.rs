@@ -1,10 +1,10 @@
-use crate::types::Type;
+use crate::types::types::Type;
 
 #[derive(Debug, Clone)]
 pub enum Expr {
     Number(i64),
-    Identifier(String),
     StringLiteral(String),
+    Identifier(String),
     UnaryOp {
         op: UnaryOp,
         expr: Box<Expr>,
@@ -15,7 +15,7 @@ pub enum Expr {
         right: Box<Expr>,
     },
     Call {
-        callee: Box<Expr>,
+        callee: Box<Expr>, // an Identifier
         args: Vec<Expr>,
     },
 }
@@ -37,7 +37,12 @@ pub enum BinaryOp {
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Expr(Expr),
-    Let { name: String, value: Expr },
+    Let {
+        mutable: bool,
+        name: String,
+        expected_type: Type,
+        expression: Expr,
+    },
     Function(Function),
 }
 
