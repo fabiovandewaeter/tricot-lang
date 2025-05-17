@@ -30,6 +30,10 @@ pub enum Token {
     Colon,
     #[token("let")]
     Let,
+    #[token("&")]
+    Ampersand,
+    #[token("mut")]
+    Mut,
 
     #[token("+")]
     Plus,

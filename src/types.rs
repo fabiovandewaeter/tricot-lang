@@ -5,6 +5,7 @@ pub enum Type {
     Null,
     Int,
     String,
+    Reference { inner: Box<Type>, mutable: bool },
 }
 
 impl Type {

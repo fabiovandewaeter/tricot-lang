@@ -5,6 +5,10 @@ pub enum Expr {
     Number(i64),
     Identifier(String),
     StringLiteral(String),
+    UnaryOp {
+        op: UnaryOp,
+        expr: Box<Expr>,
+    },
     BinaryOp {
         left: Box<Expr>,
         op: BinaryOp,
@@ -14,6 +18,12 @@ pub enum Expr {
         callee: Box<Expr>,
         args: Vec<Expr>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub enum UnaryOp {
+    Deref,  // `*expr`
+    AddrOf, // `&expr`
 }
 
 #[derive(Debug, PartialEq, Clone)]
