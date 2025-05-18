@@ -30,10 +30,9 @@ main()
 
 fn main() {
     let mut a = 1
-    print(a)
-    /*print(a)
-    a += 1
-    print(a)*/
+    //print(a)
+    a = a + 1
+    //print(a)
 }
 main()
 

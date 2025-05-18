@@ -126,7 +126,7 @@ impl TypeChecker {
                 Ok(())
             }
             Stmt::Expr(expr) => context.infer_type(expr).map(|_| ()),
-            _ => unreachable!("Error TypeChecker::check_stmt()"),
+            _ => unreachable!("Error in TypeChecker::check_stmt()"),
         }
     }
 }

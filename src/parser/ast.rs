@@ -1,4 +1,4 @@
-use crate::types::types::Type;
+use crate::{lexer::Token, types::types::Type};
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -32,6 +32,18 @@ pub enum BinaryOp {
     Minus,
     Star,
     Slash,
+}
+
+impl BinaryOp {
+    pub fn get_binary_op(token: &Token) -> Result<BinaryOp, String> {
+        match token {
+            Token::Plus => Ok(BinaryOp::Plus),
+            Token::Minus => Ok(BinaryOp::Minus),
+            Token::Star => Ok(BinaryOp::Star),
+            Token::Slash => Ok(BinaryOp::Slash),
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

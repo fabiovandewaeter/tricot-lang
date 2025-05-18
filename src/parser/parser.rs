@@ -41,7 +41,7 @@ impl Parser {
     }
 
     /// Parse all statements until EOF or closing brace
-    pub fn parse_program(&mut self, in_block: bool) -> Option<Program> {
+    pub fn parse_program(&mut self, in_block: bool) -> Result<Program, String> {
         let mut stmts = Vec::new();
         loop {
             // clone peeked token to avoid borrowing self across the loop
@@ -55,122 +55,135 @@ impl Parser {
                 break;
             }
 
-            if let Some(stmt) = self.parse_statement() {
+            if let Ok(stmt) = self.parse_statement() {
                 stmts.push(stmt);
             } else {
-                eprintln!(
+                return Err(format!(
                     "Error during parsing for token {:?} (pos {})",
                     tok, self.pos
-                );
-                return None;
+                ));
             }
         }
-        Some(Program { statements: stmts })
+
+        if !in_block {
+            let print_fn = self.functions.get("print").unwrap().clone();
+            stmts.insert(0, Stmt::Function(print_fn));
+        }
+
+        Ok(Program { statements: stmts })
     }
 
-    // CHANGER LE TYPE DE RETOURN EN Result<Stmt, String> JE PENSE
-    pub fn parse_statement(&mut self) -> Option<Stmt> {
-        if let Some(Token::Let) = self.peek() {
-            self.next();
-            let mut mutable = false;
-            if let Some(Token::Mut) = self.peek() {
-                mutable = true;
-                self.next();
-            }
-            if let Some(Token::Identifier(name)) = self.next() {
-                self.expect(Token::Assign)?;
-                let expr = self.parse_expression(0)?;
-                return Some(Stmt::Let {
-                    mutable,
-                    name,
-                    expression: expr,
-                    expected_type: Type::UNDEFINED,
-                });
-            } else {
-                return None; // erreur: identifiant attendu
-            }
-        } else if let Some(Token::Fn) = self.peek() {
-            // prase function
-            self.next();
-            let name = match self.next()? {
-                Token::Identifier(name) => name,
-                _ => return None, // Erreur: nom attendu
-            };
-            self.expect(Token::ParenthesisOpen)?;
-
-            // parse parameters
-            let mut params = Vec::new();
-            while self.peek() != Some(&Token::ParenthesisClose) {
-                let param_name = match self.next()? {
-                    Token::Identifier(name) => name,
-                    _ => return None,
-                };
-                self.expect(Token::Colon)?;
-                let param_type = Type::get_type(self.next()?).unwrap();
-                params.push((param_name, param_type));
-
-                if self.peek() == Some(&Token::Comma) {
+    pub fn parse_statement(&mut self) -> Result<Stmt, String> {
+        if let Some(token) = self.peek() {
+            match token {
+                Token::Fn => {
+                    // prase function
                     self.next();
+                    let name = match self.next().unwrap() {
+                        Token::Identifier(name) => name,
+                        _ => {
+                            return Err(
+                                "Expected an Identifier with the name of the function".into()
+                            );
+                        }
+                    };
+                    self.expect(Token::ParenthesisOpen).unwrap();
+
+                    // parse parameters
+                    let mut params = Vec::new();
+                    while self.peek() != Some(&Token::ParenthesisClose) {
+                        let param_name = match self.next().unwrap() {
+                            Token::Identifier(name) => name,
+                            _ => return Err("Expected an Identifier for function parameter".into()),
+                        };
+                        self.expect(Token::Colon).unwrap();
+                        let param_type = Type::get_type(self.next().unwrap()).unwrap();
+                        params.push((param_name, param_type));
+
+                        if self.peek() == Some(&Token::Comma) {
+                            self.next();
+                        }
+                    }
+                    self.expect(Token::ParenthesisClose).unwrap();
+
+                    // parse return type
+                    let return_type = if self.peek() == Some(&Token::Arrow) {
+                        self.expect(Token::Arrow).unwrap();
+                        Type::get_type(self.next().unwrap()).unwrap()
+                        // UTILISER self.parse_type()
+                    } else {
+                        Type::Null // Null if no return type
+                    };
+
+                    self.expect(Token::CurlyBraceOpen).unwrap();
+                    let body = self.parse_program(true).unwrap();
+                    self.expect(Token::CurlyBraceClose).unwrap();
+
+                    let function = Function {
+                        name: name.clone(),
+                        params,
+                        return_type,
+                        body: body.statements,
+                    };
+                    self.functions.insert(name.clone(), function.clone());
+                    Ok(Stmt::Function(function))
                 }
+                Token::Let => {
+                    self.next();
+                    let mut mutable = false;
+                    if let Some(Token::Mut) = self.peek() {
+                        mutable = true;
+                        self.next();
+                    }
+                    if let Some(Token::Identifier(name)) = self.next() {
+                        self.expect(Token::Assign).unwrap();
+                        let expr = self.parse_expression(0).unwrap();
+                        return Ok(Stmt::Let {
+                            mutable,
+                            name,
+                            expression: expr,
+                            expected_type: Type::UNDEFINED,
+                        });
+                    } else {
+                        return Err("Expected an Identifier for assignment".into());
+                    }
+                }
+                _ => self.parse_expression(0).map(Stmt::Expr),
             }
-            self.expect(Token::ParenthesisClose)?;
-
-            // parse return type
-            let return_type = if self.peek() == Some(&Token::Arrow) {
-                self.expect(Token::Arrow)?;
-                Type::get_type(self.next()?).unwrap()
-            } else {
-                Type::Null // Null if no return type
-            };
-
-            self.expect(Token::CurlyBraceOpen)?;
-            let body = self.parse_program(true)?;
-            self.expect(Token::CurlyBraceClose)?;
-
-            let function = Function {
-                name: name.clone(),
-                params,
-                return_type,
-                body: body.statements,
-            };
-            self.functions.insert(name.clone(), function.clone());
-            Some(Stmt::Function(function))
         } else {
-            self.parse_expression(0).map(Stmt::Expr)
+            Err("No Token found".into())
         }
     }
 
-    /// Vérifie que le token suivant correspond à `expected`, sinon None.
-    fn expect(&mut self, expected: Token) -> Option<()> {
+    /// check if the next Token matches the expected one
+    fn expect(&mut self, expected: Token) -> Result<(), String> {
         if let Some(tok) = self.next() {
             if tok == expected {
-                return Some(());
+                return Ok(());
             }
         }
-        None
+        Err("Next Token does not match the expected one".into())
     }
 
-    /// Parser d'expression de type Pratt pour gérer la priorité.
-    fn parse_expression(&mut self, min_prec: u8) -> Option<Expr> {
+    fn parse_expression(&mut self, min_prec: u8) -> Result<Expr, String> {
         // parse atom
-        let mut lhs = match self.next()? {
-            Token::Number(n) => Expr::Number(n.parse().ok()?),
+        let mut lhs = match self.next().unwrap() {
+            Token::Number(n) => Expr::Number(n.parse().ok().unwrap()),
             Token::Identifier(id) => Expr::Identifier(id),
             Token::StringLiteral(string_literal) => Expr::StringLiteral(string_literal),
             Token::ParenthesisOpen => {
-                let expr = self.parse_expression(0)?;
-                self.expect(Token::ParenthesisClose)?;
+                let expr = self.parse_expression(0).unwrap();
+                self.expect(Token::ParenthesisClose).unwrap();
                 expr
             }
-            _ => return None,
+            _ => return Err("Unexpected Token".into()),
         };
 
-        // 2) suffixe d’appels : tant qu’on voit une parenthèse, on collecte args
+        // get all parameters
         loop {
             if let Some(Token::ParenthesisOpen) = self.peek() {
-                self.next(); // consume '('
+                self.next();
                 let mut args = Vec::new();
-                // s’il n’y a pas tout de suite ')', on parse des args séparés par des ','
                 if self.peek() != Some(&Token::ParenthesisClose) {
                     loop {
                         args.push(self.parse_expression(0)?);
@@ -181,7 +194,7 @@ impl Parser {
                         break;
                     }
                 }
-                self.expect(Token::ParenthesisClose)?;
+                self.expect(Token::ParenthesisClose).unwrap();
                 lhs = Expr::Call {
                     callee: Box::new(lhs),
                     args,
@@ -197,13 +210,7 @@ impl Parser {
                 if prec < min_prec {
                     break;
                 }
-                let op = match self.next()? {
-                    Token::Plus => BinaryOp::Plus,
-                    Token::Minus => BinaryOp::Minus,
-                    Token::Star => BinaryOp::Star,
-                    Token::Slash => BinaryOp::Slash,
-                    _ => unreachable!(),
-                };
+                let op = BinaryOp::get_binary_op(&self.next().unwrap())?;
                 let next_min = if right_assoc { prec } else { prec + 1 };
                 let rhs = self.parse_expression(next_min)?;
                 lhs = Expr::BinaryOp {
@@ -215,7 +222,7 @@ impl Parser {
                 break;
             }
         }
-        Some(lhs)
+        Ok(lhs)
     }
 
     fn parse_type(&mut self) -> Result<Type, String> {

@@ -42,20 +42,24 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut type_checker = TypeChecker::new();
 
     match program {
-        Some(mut prog) => {
+        Ok(mut prog) => {
+            // display AST
+            println!("AST :\n{:#?}", prog);
+            println!("\n===========\n");
+
             // check types
             let _ = type_checker.check(&mut prog)?;
 
-            // display Program
-            println!("AST :\n{:#?}", prog);
+            // display typed AST
+            println!("typed AST :\n{:#?}", prog);
             println!("\n===========\n");
 
             // use the interpreter
             let mut interpreter = Interpreter::new();
             interpreter.run(prog);
         }
-        None => {
-            eprintln!("Error during parsing");
+        Err(message) => {
+            eprintln!("{}", message);
         }
     }
 
