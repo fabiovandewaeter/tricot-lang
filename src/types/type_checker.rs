@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, env::var};
 
 use crate::parser::ast::{Expr, Function, Program, Stmt};
 
@@ -6,7 +6,8 @@ use super::types::Type;
 
 struct TypeContext {
     functions: HashMap<String, Function>,
-    variables: HashMap<String, Type>,
+    /// name -> (Type, mutable)
+    variables: HashMap<String, (Type, bool)>,
 }
 
 impl TypeContext {
@@ -21,13 +22,19 @@ impl TypeContext {
     fn infer_type(&self, expression: &Expr) -> Result<Type, String> {
         match expression {
             Expr::Number(_) => Ok(Type::Int),
+
             Expr::StringLiteral(_) => Ok(Type::String),
-            Expr::Identifier(name) => self
-                .variables
-                .get(name)
-                .cloned()
-                .ok_or_else(|| format!("Undefined variable : {}", name)),
+
+            Expr::Identifier(name) => {
+                if let Some(variable_info) = self.variables.get(name) {
+                    Ok(variable_info.0.clone()) // variable_info is a tuple of type (Type, bool)
+                } else {
+                    Err(format!("Undefined variable : {}", name))
+                }
+            }
+
             Expr::UnaryOp { op, expr } => self.infer_type(expr),
+
             Expr::BinaryOp { left, op, right } => {
                 let l_type = self.infer_type(&left);
                 let r_type = self.infer_type(&right);
@@ -37,6 +44,7 @@ impl TypeContext {
                     Err(format!("Error types BinaryOp : {:?} {:?}", l_type, r_type))
                 }
             }
+
             Expr::Call { callee, args } => {
                 if let Expr::Identifier(function_name) = &**callee {
                     Ok(self
@@ -95,7 +103,7 @@ impl TypeChecker {
         for (param_name, param_type) in &function.params {
             local_context
                 .variables
-                .insert(param_name.clone(), param_type.clone());
+                .insert(param_name.clone(), (param_type.clone(), false));
         }
 
         for stmt in &function.body {
@@ -122,9 +130,35 @@ impl TypeChecker {
                     ));
                 }
                 // else, add variable to context
-                context.variables.insert(name.clone(), inferred_type);
+                context
+                    .variables
+                    .insert(name.clone(), (inferred_type, mutable.clone()));
                 Ok(())
             }
+
+            Stmt::Assignment { name, expression } => {
+                let var_info = context
+                    .variables
+                    .get(name)
+                    .ok_or_else(|| format!("Variable '{}' not declared", name))?;
+
+                // checks if variable is mutable
+                if !var_info.1 {
+                    return Err(format!("Cannot assign to immutable variable : {}", name));
+                }
+
+                // checks variable type
+                let expr_type = context.infer_type(expression)?;
+                if expr_type != var_info.0 {
+                    return Err(format!(
+                        "Type mismatch for {}: expected {:?} but found {:?}",
+                        name, var_info.0, expr_type
+                    ));
+                }
+
+                Ok(())
+            }
+
             Stmt::Expr(expr) => context.infer_type(expr).map(|_| ()),
             _ => unreachable!("Error in TypeChecker::check_stmt()"),
         }
