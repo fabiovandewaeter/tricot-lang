@@ -10,30 +10,20 @@ fn main() {
     let b = add(1, 1)
     print(b)
 }
-main()
 */
 
 
-/*
 fn incr(a: &mut Int) {
-    *a += 1
+    *a = *a + 1
 }
 
 fn main() {
     let mut a = 1
+    print(a)
     incr(&mut a)
     print(a)
 }
-main()
-*/
 
-
-fn main() {
-    let mut a = 1
-    print(a)
-    a = a + 1
-    print(a)
-}
 main()
 
 
@@ -42,24 +32,18 @@ main()
 
 
 // cascade
-/*let b = 1
-    add(1);
-    add(1);
-    yourself
-
-let c = 1
-    -> add(1)
-    -> add(1)
-    -> yourself
-
+/*
 let d = 1
     <- add(1)
     <- add(1)
-    <- yourself*/
+    <- yourself
+*/
 
 // pipeline
-/*let player =
+/*
+let player =
   Entity()
   |> add(Position(10, 5))
   |> add(Health(100, 100))
-  |> yourself*/
+  |> yourself
+*/

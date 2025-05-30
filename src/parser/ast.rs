@@ -22,8 +22,9 @@ pub enum Expr {
 
 #[derive(Debug, Clone)]
 pub enum UnaryOp {
-    Deref,  // `*expr`
-    AddrOf, // `&expr`
+    Deref, // `*expr`
+    /// mutable
+    AddrOf(bool), // `&expr`
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -56,7 +57,8 @@ pub enum Stmt {
         expression: Expr,
     },
     Assignment {
-        name: String,
+        //name: String,
+        target: Expr,
         expression: Expr,
     },
     Function(Function),

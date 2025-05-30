@@ -38,30 +38,23 @@ fn main() -> Result<(), Box<dyn Error>> {
     let tokens: Vec<Token> = tokens_with_span.into_iter().map(|(tok, _)| tok).collect();
 
     let mut parser = Parser::new(tokens);
-    let program = parser.parse_program(false);
+    let mut program = parser.parse_program(false);
     let mut type_checker = TypeChecker::new();
 
-    match program {
-        Ok(mut prog) => {
-            // display AST
-            println!("AST :\n{:#?}", prog);
-            println!("\n===========\n");
+    // display AST
+    println!("AST :\n{:#?}", program);
+    println!("\n===========\n");
 
-            // check types
-            let _ = type_checker.check(&mut prog)?;
+    // check types
+    let _ = type_checker.check(&mut program);
 
-            // display typed AST
-            println!("typed AST :\n{:#?}", prog);
-            println!("\n===========\n");
+    // display typed AST
+    println!("typed AST :\n{:#?}", program);
+    println!("\n===========\n");
 
-            // use the interpreter
-            let mut interpreter = Interpreter::new();
-            interpreter.run(prog);
-        }
-        Err(message) => {
-            eprintln!("{}", message);
-        }
-    }
+    // use the interpreter
+    let mut interpreter = Interpreter::new();
+    interpreter.run(program);
 
     Ok(())
 }

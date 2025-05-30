@@ -11,6 +11,7 @@ pub enum Value {
     Null,
     Int(i64),
     String(String),
+    Reference { name: String, mutable: bool },
 }
 
 impl Value {
@@ -19,6 +20,7 @@ impl Value {
             Value::Null => Type::Null,
             Value::Int(_) => Type::Int,
             Value::String(_) => Type::String,
+            _ => unreachable!(),
         }
     }
 }

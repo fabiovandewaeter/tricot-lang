@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use crate::{parser::ast::*, types::types::Type, values::Value};
 
 pub struct Interpreter {
-    env: std::collections::HashMap<String, Value>,
+    //env: HashMap<String, Value>,
+    local_env: HashMap<String, Value>,
+    parent_env: HashMap<String, Value>,
     functions: HashMap<String, Function>,
     in_function: bool,
 }
@@ -28,6 +30,62 @@ impl Interpreter {
         }
     }
 
+    fn run_stmt(&mut self, stmt: Stmt) {
+        match stmt {
+            Stmt::Let {
+                mutable,
+                name,
+                expected_type,
+                expression,
+            } => {
+                let val = self.eval_expr(expression);
+                self.env.insert(name, val);
+            }
+
+            Stmt::Assignment { target, expression } => {
+                let rhs = self.eval_expr(expression);
+
+                match target {
+                    // a = expr
+                    Expr::Identifier(name) => {
+                        let slot = self
+                            .env
+                            .get_mut(&name)
+                            .expect(&format!("Unknown variable: {}", name));
+                        *slot = rhs;
+                    }
+                    // *a = expr
+                    Expr::UnaryOp {
+                        op: UnaryOp::Deref,
+                        expr,
+                    } => {
+                        if let Expr::Identifier(name) = *expr {
+                            let slot = self
+                                .env
+                                .get_mut(&name)
+                                .expect(&format!("Unknown variable: {}", name));
+                            *slot = rhs;
+                        } else {
+                            panic!("Invalid l-value in deref assignment");
+                        }
+                    }
+
+                    other => {
+                        panic!("Invalid assignment target: {:?}", other);
+                    }
+                }
+            }
+
+            Stmt::Expr(expr) => {
+                if !self.in_function {
+                    let val = self.eval_expr(expr);
+                    println!("=> {:?}", val);
+                }
+            }
+            _ => panic!("Instruction non supportée dans une fonction"),
+        }
+    }
+
     fn eval_expr(&mut self, expr: Expr) -> Value {
         match expr {
             Expr::Number(n) => Value::Int(n),
@@ -40,7 +98,30 @@ impl Interpreter {
 
             Expr::StringLiteral(string_literal) => Value::String(string_literal),
 
-            Expr::UnaryOp { op, expr } => todo!(),
+            Expr::UnaryOp { op, expr } => {
+                match op {
+                    UnaryOp::AddrOf(mutable) => {
+                        // &x ou &mut x doit porter sur un ident
+                        if let Expr::Identifier(name) = *expr {
+                            Value::Reference { name, mutable }
+                        } else {
+                            panic!("Cannot take reference of non-identifier {:?}", expr);
+                        }
+                    }
+                    UnaryOp::Deref => {
+                        // *x : d'abord évaluer x -> doit être une Reference
+                        let v = self.eval_expr(*expr);
+                        if let Value::Reference { name, mutable: _ } = v {
+                            self.env
+                                .get(&name)
+                                .cloned()
+                                .expect(&format!("Dereference of unknown variable '{}'", name))
+                        } else {
+                            panic!("Cannot dereference non-reference value {:?}", v);
+                        }
+                    }
+                }
+            }
 
             Expr::BinaryOp { left, op, right } => {
                 let l = self.eval_expr(*left);
@@ -91,6 +172,25 @@ impl Interpreter {
                             match (&args_eval[i], param_type) {
                                 (Value::Int(_), Type::Int) => (),
                                 (Value::String(_), Type::String) => (),
+                                (
+                                    Value::Reference {
+                                        name,
+                                        mutable: arg_mutable,
+                                    },
+                                    Type::Reference {
+                                        inner,
+                                        mutable: param_mutable,
+                                    },
+                                ) => {
+                                    if arg_mutable != param_mutable {
+                                        panic!(
+                                            "Mutability mismatch for reference argument {}: expected &{}mut, got &{}mut",
+                                            i,
+                                            if *param_mutable { "" } else { "!" },
+                                            if *arg_mutable { "" } else { "!" },
+                                        );
+                                    }
+                                }
                                 _ => panic!("Type mismatch for argument {}", i),
                             }
                         }
@@ -121,23 +221,43 @@ impl Interpreter {
                                     self.env.insert(name, val);
                                 }
 
-                                Stmt::Assignment { name, expression } => {
-                                    let evaluated_expression = self.eval_expr(expression);
-                                    match self.env.get_mut(&name) {
-                                        Some(value) => {
-                                            *value = evaluated_expression;
+                                Stmt::Assignment { target, expression } => {
+                                    let rhs = self.eval_expr(expression);
+                                    match target {
+                                        // a = expr
+                                        Expr::Identifier(name) => {
+                                            let slot = self
+                                                .env
+                                                .get_mut(&name)
+                                                .expect(&format!("Unknown variable: {}", name));
+                                            *slot = rhs;
                                         }
-                                        None => {
-                                            panic!("Unkown variable : {:?}", name);
+                                        // *a = expr
+                                        Expr::UnaryOp {
+                                            op: UnaryOp::Deref,
+                                            expr,
+                                        } => {
+                                            if let Expr::Identifier(name) = *expr {
+                                                let slot = self
+                                                    .env
+                                                    .get_mut(&name)
+                                                    .expect(&format!("Unknown variable: {}", name));
+                                                *slot = rhs;
+                                            } else {
+                                                panic!("Invalid l-value in deref assignment");
+                                            }
                                         }
-                                    };
+
+                                        other => {
+                                            panic!("Invalid assignment target: {:?}", other);
+                                        }
+                                    }
                                 }
 
                                 Stmt::Expr(e) => {
-                                    // Capturer la dernière valeur d'expression
                                     return_value = self.eval_expr(e);
                                 }
-                                _ => panic!("Instruction non supportée"),
+                                _ => panic!("Unknown expression"),
                             }
                         }
                         self.in_function = false;
@@ -163,40 +283,6 @@ impl Interpreter {
                     panic!("Cannot call non-identifier expression");
                 }
             }
-        }
-    }
-
-    fn run_stmt(&mut self, stmt: Stmt) {
-        match stmt {
-            Stmt::Let {
-                mutable,
-                name,
-                expected_type,
-                expression,
-            } => {
-                let val = self.eval_expr(expression);
-                self.env.insert(name, val);
-            }
-
-            Stmt::Assignment { name, expression } => {
-                let evaluated_expression = self.eval_expr(expression);
-                match self.env.get_mut(&name) {
-                    Some(value) => {
-                        *value = evaluated_expression;
-                    }
-                    None => {
-                        panic!("Unkown variable : {:?}", name);
-                    }
-                };
-            }
-
-            Stmt::Expr(expr) => {
-                if !self.in_function {
-                    let val = self.eval_expr(expr);
-                    println!("=> {:?}", val);
-                }
-            }
-            _ => panic!("Instruction non supportée dans une fonction"),
         }
     }
 }
