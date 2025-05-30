@@ -28,14 +28,16 @@ main()
 */
 
 
-fn main() {
+/*fn main() {
     let mut a = 1
     //print(a)
     a = a + 1
     //print(a)
 }
-main()
-
+main()*/
+let mut a = 1
+a = a + 1
+print(a)
 
 
 

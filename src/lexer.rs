@@ -4,6 +4,10 @@ use logos::Logos;
 pub enum Token {
     #[regex(r"[ \t\n\f]+", logos::skip)]
     Whitespace,
+    #[token("\\n")]
+    Newline,
+    #[token(";")]
+    Semicolon,
     #[regex(r"//.*", logos::skip)] // one line with // or ///
     #[regex(r"/\*([^*]|\*[^/])*\*/", logos::skip)] // multiple lines with /**/
     Comment,

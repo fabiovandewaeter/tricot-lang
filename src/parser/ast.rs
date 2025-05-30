@@ -55,6 +55,10 @@ pub enum Stmt {
         expected_type: Type,
         expression: Expr,
     },
+    Assignment {
+        name: String,
+        expression: Expr,
+    },
     Function(Function),
 }
 

@@ -50,22 +50,19 @@ impl Parser {
                 None => break,
             };
 
-            // Arrêter seulement si c'est un bloc et qu'on trouve '}'
+            // stops when it reachs a '}'
             if in_block && tok == Token::CurlyBraceClose {
                 break;
             }
 
-            if let Ok(stmt) = self.parse_statement() {
-                stmts.push(stmt);
-            } else {
-                return Err(format!(
-                    "Error during parsing for token {:?} (pos {})",
-                    tok, self.pos
-                ));
+            match self.parse_statement() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(e) => return Err(e),
             }
         }
 
         if !in_block {
+            // add the print function to the list of known functions by the Program
             let print_fn = self.functions.get("print").unwrap().clone();
             stmts.insert(0, Stmt::Function(print_fn));
         }
@@ -87,7 +84,7 @@ impl Parser {
                             );
                         }
                     };
-                    self.expect(Token::ParenthesisOpen).unwrap();
+                    self.expect(Token::ParenthesisOpen)?;
 
                     // parse parameters
                     let mut params = Vec::new();
@@ -96,28 +93,28 @@ impl Parser {
                             Token::Identifier(name) => name,
                             _ => return Err("Expected an Identifier for function parameter".into()),
                         };
-                        self.expect(Token::Colon).unwrap();
-                        let param_type = Type::get_type(self.next().unwrap()).unwrap();
+                        self.expect(Token::Colon)?;
+                        let param_type = Type::get_type(self.next().unwrap())?;
                         params.push((param_name, param_type));
 
                         if self.peek() == Some(&Token::Comma) {
                             self.next();
                         }
                     }
-                    self.expect(Token::ParenthesisClose).unwrap();
+                    self.expect(Token::ParenthesisClose)?;
 
                     // parse return type
                     let return_type = if self.peek() == Some(&Token::Arrow) {
-                        self.expect(Token::Arrow).unwrap();
-                        Type::get_type(self.next().unwrap()).unwrap()
+                        self.expect(Token::Arrow)?;
+                        Type::get_type(self.next().unwrap())?
                         // UTILISER self.parse_type()
                     } else {
                         Type::Null // Null if no return type
                     };
 
-                    self.expect(Token::CurlyBraceOpen).unwrap();
-                    let body = self.parse_program(true).unwrap();
-                    self.expect(Token::CurlyBraceClose).unwrap();
+                    self.expect(Token::CurlyBraceOpen)?;
+                    let body = self.parse_program(true)?;
+                    self.expect(Token::CurlyBraceClose)?;
 
                     let function = Function {
                         name: name.clone(),
@@ -128,6 +125,7 @@ impl Parser {
                     self.functions.insert(name.clone(), function.clone());
                     Ok(Stmt::Function(function))
                 }
+
                 Token::Let => {
                     self.next();
                     let mut mutable = false;
@@ -136,8 +134,8 @@ impl Parser {
                         self.next();
                     }
                     if let Some(Token::Identifier(name)) = self.next() {
-                        self.expect(Token::Assign).unwrap();
-                        let expr = self.parse_expression(0).unwrap();
+                        self.expect(Token::Assign)?;
+                        let expr = self.parse_expression(0)?;
                         return Ok(Stmt::Let {
                             mutable,
                             name,
@@ -148,6 +146,25 @@ impl Parser {
                         return Err("Expected an Identifier for assignment".into());
                     }
                 }
+
+                Token::Identifier(name) => {
+                    // checks if next token is an Assign to returns a Stmt::Assignment, else
+                    // its an expression and returns it
+                    if let Some(Token::Assign) = self.tokens.get(self.pos + 1) {
+                        let name_copy = name.to_string();
+                        self.next();
+                        self.expect(Token::Assign)?;
+                        let expr = self.parse_expression(0)?;
+                        return Ok(Stmt::Assignment {
+                            name: name_copy,
+                            expression: expr,
+                        });
+                    } else {
+                        let expr = self.parse_expression(0)?;
+                        return Ok(Stmt::Expr(expr));
+                    }
+                }
+
                 _ => self.parse_expression(0).map(Stmt::Expr),
             }
         } else {
@@ -172,14 +189,14 @@ impl Parser {
             Token::Identifier(id) => Expr::Identifier(id),
             Token::StringLiteral(string_literal) => Expr::StringLiteral(string_literal),
             Token::ParenthesisOpen => {
-                let expr = self.parse_expression(0).unwrap();
-                self.expect(Token::ParenthesisClose).unwrap();
+                let expr = self.parse_expression(0)?;
+                self.expect(Token::ParenthesisClose)?;
                 expr
             }
-            _ => return Err("Unexpected Token".into()),
+            token => return Err(format!("Unexpected Token : {:?}", token)),
         };
 
-        // get all parameters
+        // get all parameters if it is a function call
         loop {
             if let Some(Token::ParenthesisOpen) = self.peek() {
                 self.next();
@@ -188,13 +205,13 @@ impl Parser {
                     loop {
                         args.push(self.parse_expression(0)?);
                         if self.peek() == Some(&Token::Comma) {
-                            self.next(); // consume ','
+                            self.next();
                             continue;
                         }
                         break;
                     }
                 }
-                self.expect(Token::ParenthesisClose).unwrap();
+                self.expect(Token::ParenthesisClose)?;
                 lhs = Expr::Call {
                     callee: Box::new(lhs),
                     args,

@@ -164,6 +164,19 @@ impl Interpreter {
                 let val = self.eval_expr(expression);
                 self.env.insert(name, val);
             }
+
+            Stmt::Assignment { name, expression } => {
+                let evaluated_expression = self.eval_expr(expression);
+                match self.env.get_mut(&name) {
+                    Some(value) => {
+                        *value = evaluated_expression;
+                    }
+                    None => {
+                        panic!("Unkown variable : {:?}", name);
+                    }
+                };
+            }
+
             Stmt::Expr(expr) => {
                 if !self.in_function {
                     let val = self.eval_expr(expr);
