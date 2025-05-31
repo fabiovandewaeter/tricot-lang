@@ -73,6 +73,28 @@ impl TypeContext {
             }
         }
     }
+
+    fn is_expr_mutable(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Identifier(name) => self
+                .variables
+                .get(name)
+                .map(|(_, mutable)| *mutable)
+                .unwrap_or(false),
+            Expr::UnaryOp {
+                op: UnaryOp::Deref,
+                expr,
+            } => {
+                let ty = self.infer_type(expr);
+                if let Type::Reference { mutable, .. } = ty {
+                    mutable
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
 }
 
 pub struct TypeChecker {}
@@ -142,6 +164,9 @@ impl TypeChecker {
             }
 
             Stmt::Assignment { target, expression } => {
+                self.check_expr(context, target);
+                self.check_expr(context, expression);
+
                 // get the name of the variable to assign the value to
                 let var_name = match target {
                     // a = expr
@@ -198,7 +223,9 @@ impl TypeChecker {
                 }
             }
 
-            Stmt::Expr(expr) => (), //self.check_expr(context, expr),
+            Stmt::Expr(expr) => self.check_expr(context, expr),
+
+            Stmt::Function(_) => {}
 
             _ => unreachable!("Error in TypeChecker::check_stmt()"),
         }
@@ -206,7 +233,29 @@ impl TypeChecker {
 
     fn check_expr(&self, context: &mut TypeContext, expr: &Expr) {
         match expr {
-            Expr::Call { callee, args } => todo!(),
+            Expr::UnaryOp { op, expr } => {
+                self.check_expr(context, expr);
+                match op {
+                    UnaryOp::AddrOf(true) => {
+                        if !context.is_expr_mutable(expr) {
+                            panic!("Cannot borrow immutable expression as mutable: {:?}", expr);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            Expr::BinaryOp { left, op: _, right } => {
+                self.check_expr(context, left);
+                self.check_expr(context, right);
+            }
+
+            Expr::Call { callee, args } => {
+                self.check_expr(context, callee);
+                for arg in args {
+                    self.check_expr(context, arg);
+                }
+            }
             _ => (),
         }
     }
