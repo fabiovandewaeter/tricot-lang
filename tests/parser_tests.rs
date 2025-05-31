@@ -5,6 +5,7 @@ use tricot_lang::{
         ast::{Expr, Stmt},
         parser::Parser,
     },
+    types::types::Type,
 };
 
 fn parse(input: &str) -> Vec<Stmt> {
@@ -16,8 +17,6 @@ fn parse(input: &str) -> Vec<Stmt> {
 #[test]
 fn test_parse_variable_declaration() {
     let statements = parse("let mut x = 42");
-
-    println!("{:?}", statements);
 
     assert_eq!(statements.len(), 1,);
 
@@ -39,4 +38,37 @@ fn test_parse_variable_declaration() {
     };
 
     assert_eq!(value, 42);
+}
+
+#[test]
+fn test_parse_function_declaration() {
+    let statements = parse(
+        "fn incr(a: &mut Int) -> Int {
+    *a = *a + 1
+    0
+}",
+    );
+
+    assert_eq!(statements.len(), 1,);
+
+    let Stmt::Function(function) = &statements[0] else {
+        panic!("Should have been a Stmt::Function {:?}", statements[0]);
+    };
+
+    assert_eq!(function.name, "incr");
+
+    assert_eq!(
+        function.params[0],
+        (
+            "a".to_string(),
+            Type::Reference {
+                inner: Box::new(Type::Int),
+                mutable: true
+            }
+        )
+    );
+
+    let Type::Int = function.return_type else {
+        panic!("Should have been a Type::Int {:?}", function.return_type);
+    };
 }
