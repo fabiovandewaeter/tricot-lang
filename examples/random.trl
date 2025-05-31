@@ -13,7 +13,7 @@ fn main() {
 */
 
 
-fn incr(a: &mut Int) {
+/*fn incr(a: &mut Int) {
     *a = *a + 1
 }
 
@@ -22,9 +22,19 @@ fn main() {
     print(a)
     incr(&mut a)
     print(a)
-}
+}*/
 
-main()
+/*fn main(){
+    let mut a = 1
+    a = "word"
+    print(a)
+}*/
+let mut a = 1
+a = "word"
+
+
+
+//main()
 
 
 

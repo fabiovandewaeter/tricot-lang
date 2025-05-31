@@ -116,8 +116,9 @@ impl TypeChecker {
         }
 
         for stmt in &prog.statements {
-            if let Stmt::Function(func) = stmt {
-                self.check_function(&global_context, func);
+            match stmt {
+                Stmt::Function(func) => self.check_function(&global_context, func),
+                _ => self.check_stmt(&mut global_context, stmt),
             }
         }
     }
@@ -214,6 +215,7 @@ impl TypeChecker {
                     Type::Reference { inner, mutable } => *inner.clone(),
                     other => other.clone(),
                 };
+                println!("TEST {:?} {:?} {:?}", expected, rhs_type, declared_type);
                 if rhs_type != expected {
                     println!("{:?}", stmt);
                     panic!(

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{parser::ast::*, types::types::Type, values::Value};
+use crate::{parser::ast::*, values::Value};
 
 pub struct Interpreter {
     //env: HashMap<String, Value>,
