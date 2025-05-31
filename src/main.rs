@@ -4,13 +4,8 @@ use interpreter::interpreter::Interpreter;
 use lexer::Token;
 use logos::Logos;
 use parser::parser::Parser;
+use tricot_lang::{interpreter, lexer, parser, types};
 use types::type_checker::TypeChecker;
-
-mod interpreter;
-mod lexer;
-mod parser;
-mod types;
-mod values;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let path = match env::args().nth(1) {
