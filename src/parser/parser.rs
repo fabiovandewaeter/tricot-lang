@@ -8,23 +8,26 @@ pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
     functions: HashMap<String, Function>,
+    include_builtins: bool,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        let print_function = Function {
+    pub fn new(tokens: Vec<Token>, include_builtins: bool) -> Self {
+        Self {
+            tokens,
+            pos: 0,
+            functions: HashMap::new(),
+            include_builtins,
+        }
+    }
+
+    fn get_builtins() -> Vec<Function> {
+        vec![Function {
             name: "print".into(),
             params: vec![("value".into(), Type::String)],
             return_type: Type::Null,
             body: Vec::new(),
-        };
-        let mut functions = HashMap::new();
-        functions.insert("print".into(), print_function);
-        Self {
-            tokens,
-            pos: 0,
-            functions,
-        }
+        }]
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -58,10 +61,12 @@ impl Parser {
             stmts.push(self.parse_statement());
         }
 
-        if !in_block {
+        if !in_block && self.include_builtins {
             // add the print function to the list of known functions by the Program
-            let print_fn = self.functions.get("print").unwrap().clone();
-            stmts.insert(0, Stmt::Function(print_fn));
+            let builtins = Self::get_builtins();
+            for func in builtins {
+                self.functions.insert(func.name.clone(), func);
+            }
         }
 
         Program { statements: stmts }
