@@ -27,14 +27,14 @@ fn test_parse_variable_declaration() {
         expression,
     } = &statements[0]
     else {
-        panic!("Should have been a Stmt::Let {:?}", statements[0]);
+        panic!("Should have been a Stmt::Let : {:?}", statements[0]);
     };
 
     assert!(mutable);
     assert_eq!(name, "x");
 
     let Expr::Number(value) = *expression else {
-        panic!("Should have been a Expr::Number {:?}", expression);
+        panic!("Should have been a Expr::Number : {:?}", expression);
     };
 
     assert_eq!(value, 42);
@@ -52,7 +52,7 @@ fn test_parse_function_declaration() {
     assert_eq!(statements.len(), 1,);
 
     let Stmt::Function(function) = &statements[0] else {
-        panic!("Should have been a Stmt::Function {:?}", statements[0]);
+        panic!("Should have been a Stmt::Function : {:?}", statements[0]);
     };
 
     assert_eq!(function.name, "incr");
@@ -69,6 +69,6 @@ fn test_parse_function_declaration() {
     );
 
     let Type::Int = function.return_type else {
-        panic!("Should have been a Type::Int {:?}", function.return_type);
+        panic!("Should have been a Type::Int : {:?}", function.return_type);
     };
 }

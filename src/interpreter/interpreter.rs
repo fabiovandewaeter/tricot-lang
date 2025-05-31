@@ -67,7 +67,7 @@ impl Interpreter {
         panic!("Undefined Identifier: {}", name)
     }
     /// lookup standard (skip=0)
-    fn lookup(&self, name: &str) -> Value {
+    pub fn lookup(&self, name: &str) -> Value {
         self.lookup_skip(name, 0)
     }
 

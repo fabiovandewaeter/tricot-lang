@@ -6,7 +6,7 @@ pub struct VarInfo {
     pub mutable: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Null,
     Int(i64),
