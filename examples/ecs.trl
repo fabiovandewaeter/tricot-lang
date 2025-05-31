@@ -1,0 +1,46 @@
+comp Position(x: Int, y: Int)
+comp Velocity(dx: Int, dy: Int)
+comp Health(Int)
+
+res Time(Int)
+
+// implicit loop, parameters are outside
+sys move_entities(mut Position, Velocity) {
+    Position.x += Velocity.dx
+    Position.y += Velocity.dy
+}
+
+// explicit loop
+sys physics_update using (t: Time) {
+    for (mut pos: Position, vel: Velocity) in query {
+        pos.0 += vel.0 * t.0
+        pos.1 += vel.1 * t.0
+    }
+}
+
+// can specify that the system is sequential
+seq sys health_system {
+    for (mut Health, Damage, ?Type) in query where Health > 0 {
+        Health -= Damage.amount
+    }
+}
+
+// can specify whether a sub-part is sequential or parallel
+sys producer_consumer {
+    // parallel
+    par for (mut Source) => generate_items()
+    
+    // sequential
+    seq {
+        let batch = Buffer.drain()
+        TargetQueue.push(batch)
+    }
+    
+    // parallel too
+    for (mut Consumer) => process_items()
+}
+
+schedule {
+    physics_update,
+    health_system
+}
