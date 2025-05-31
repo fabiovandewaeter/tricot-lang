@@ -4,8 +4,8 @@ use crate::{parser::ast::*, types::types::Type, values::Value};
 
 pub struct Interpreter {
     //env: HashMap<String, Value>,
-    local_env: HashMap<String, Value>,
-    parent_env: HashMap<String, Value>,
+    global_env: HashMap<String, Value>,
+    stack: Vec<HashMap<String, Value>>,
     functions: HashMap<String, Function>,
     in_function: bool,
 }
@@ -13,21 +13,105 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
-            env: HashMap::new(),
+            //env: HashMap::new(),
+            global_env: HashMap::new(),
+            stack: vec![HashMap::new()],
             functions: HashMap::new(),
             in_function: false,
         }
     }
 
     pub fn run(&mut self, prog: Program) {
-        for stmt in prog.statements {
-            match stmt {
-                Stmt::Function(func) => {
-                    self.functions.insert(func.name.clone(), func);
-                }
-                _ => self.run_stmt(stmt),
+        // add all functions
+        for stmt in &prog.statements {
+            if let Stmt::Function(func) = stmt {
+                self.functions.insert(func.name.clone(), func.clone());
             }
         }
+        // execute
+        for stmt in prog.statements {
+            if let Stmt::Function(_) = stmt {
+                continue;
+            }
+            self.run_stmt(stmt);
+        }
+    }
+
+    /// find a variable in global environment or stack of environments
+    /*fn lookup(&self, name: &str) -> Value {
+        // Search call stack top-down
+        for env in self.stack.iter().rev() {
+            if let Some(v) = env.get(name) {
+                return v.clone();
+            }
+        }
+        // Check global env
+        if let Some(v) = self.global_env.get(name) {
+            return v.clone();
+        }
+        panic!("Undefined Identifier: {}", name)
+    }*/
+    fn lookup_skip(&self, name: &str, skip: usize) -> Value {
+        // Parcourir les environnements du plus récent au plus ancien en sautant 'skip' cadres
+        for (i, env) in self.stack.iter().enumerate().rev().skip(skip) {
+            if let Some(v) = env.get(name) {
+                return v.clone();
+            }
+        }
+        // Chercher dans l'environnement global après avoir sauté les cadres
+        if skip <= self.stack.len() {
+            if let Some(v) = self.global_env.get(name) {
+                return v.clone();
+            }
+        }
+        panic!("Undefined Identifier: {}", name)
+    }
+    /// lookup standard (skip=0)
+    fn lookup(&self, name: &str) -> Value {
+        self.lookup_skip(name, 0)
+    }
+
+    fn update_variable(&mut self, name: &str, value: Value) {
+        // Update in current stack frames
+        for env in self.stack.iter_mut().rev() {
+            if env.contains_key(name) {
+                env.insert(name.to_string(), value);
+                return;
+            }
+        }
+        // Update in global env
+        if self.global_env.contains_key(name) {
+            self.global_env.insert(name.to_string(), value);
+            return;
+        }
+        panic!("Assignment to undefined variable: {}", name);
+    }
+
+    /// Mise à jour de variable avec saut de cadres
+    fn update_variable_skip(&mut self, name: &str, value: Value, skip: usize) {
+        let mut skipped = 0;
+        // Mettre à jour dans la pile
+        for env in self.stack.iter_mut().rev() {
+            if skipped < skip {
+                skipped += 1;
+                continue;
+            }
+            if env.contains_key(name) {
+                env.insert(name.to_string(), value.clone());
+                return;
+            }
+        }
+        // Mettre à jour dans global
+        if skipped < skip {
+            skipped += 1;
+        }
+        if skipped >= skip {
+            if self.global_env.contains_key(name) {
+                self.global_env.insert(name.to_string(), value);
+                return;
+            }
+        }
+        panic!("Assignment to undefined variable: {}", name);
     }
 
     fn run_stmt(&mut self, stmt: Stmt) {
@@ -39,49 +123,63 @@ impl Interpreter {
                 expression,
             } => {
                 let val = self.eval_expr(expression);
-                self.env.insert(name, val);
+                if self.in_function {
+                    // Insert into current stack frame
+                    if let Some(env) = self.stack.last_mut() {
+                        env.insert(name, val);
+                    } else {
+                        panic!("No stack frame available");
+                    }
+                } else {
+                    // Global variable
+                    self.global_env.insert(name, val);
+                }
             }
 
             Stmt::Assignment { target, expression } => {
                 let rhs = self.eval_expr(expression);
-
                 match target {
                     // a = expr
                     Expr::Identifier(name) => {
-                        let slot = self
-                            .env
-                            .get_mut(&name)
-                            .expect(&format!("Unknown variable: {}", name));
-                        *slot = rhs;
+                        //self.update_variable(&name, rhs);
+                        self.update_variable_skip(&name, rhs, 0);
                     }
                     // *a = expr
                     Expr::UnaryOp {
                         op: UnaryOp::Deref,
                         expr,
                     } => {
-                        if let Expr::Identifier(name) = *expr {
-                            let slot = self
-                                .env
-                                .get_mut(&name)
-                                .expect(&format!("Unknown variable: {}", name));
-                            *slot = rhs;
+                        if let Value::Reference {
+                            name: target_name,
+                            mutable,
+                        } = self.eval_expr(*expr)
+                        {
+                            if !mutable {
+                                panic!("Cannot assign through immutable reference");
+                            }
+                            //self.update_variable(&target_name, rhs);
+                            self.update_variable_skip(&target_name, rhs, 1);
                         } else {
-                            panic!("Invalid l-value in deref assignment");
+                            panic!("Cannot dereference non-reference value");
                         }
                     }
-
-                    other => {
-                        panic!("Invalid assignment target: {:?}", other);
-                    }
+                    _ => panic!("Invalid assignment target"),
                 }
             }
 
             Stmt::Expr(expr) => {
+                let val = self.eval_expr(expr);
+                // Only print results at top level
                 if !self.in_function {
-                    let val = self.eval_expr(expr);
                     println!("=> {:?}", val);
                 }
             }
+
+            Stmt::Function(func) => {
+                // Already handled in run()
+                //self.functions.insert(func.name.clone(), func);
+            }
+
             _ => panic!("Instruction non supportée dans une fonction"),
         }
     }
@@ -90,38 +188,28 @@ impl Interpreter {
         match expr {
             Expr::Number(n) => Value::Int(n),
 
-            Expr::Identifier(id) => self
-                .env
-                .get(&id)
-                .cloned()
-                .expect(&format!("Undefined Identifier: {}", id)),
+            Expr::Identifier(name) => self.lookup(&name),
 
             Expr::StringLiteral(string_literal) => Value::String(string_literal),
 
-            Expr::UnaryOp { op, expr } => {
-                match op {
-                    UnaryOp::AddrOf(mutable) => {
-                        // &x ou &mut x doit porter sur un ident
-                        if let Expr::Identifier(name) = *expr {
-                            Value::Reference { name, mutable }
-                        } else {
-                            panic!("Cannot take reference of non-identifier {:?}", expr);
-                        }
-                    }
-                    UnaryOp::Deref => {
-                        // *x : d'abord évaluer x -> doit être une Reference
-                        let v = self.eval_expr(*expr);
-                        if let Value::Reference { name, mutable: _ } = v {
-                            self.env
-                                .get(&name)
-                                .cloned()
-                                .expect(&format!("Dereference of unknown variable '{}'", name))
-                        } else {
-                            panic!("Cannot dereference non-reference value {:?}", v);
-                        }
+            Expr::UnaryOp { op, expr } => match op {
+                UnaryOp::AddrOf(mutable) => {
+                    if let Expr::Identifier(name) = *expr {
+                        Value::Reference { name, mutable }
+                    } else {
+                        panic!("Cannot take address of non-identifier");
                     }
                 }
-            }
+                UnaryOp::Deref => {
+                    let v = self.eval_expr(*expr);
+                    if let Value::Reference { name, mutable: _ } = v {
+                        //self.lookup(&name)
+                        self.lookup_skip(&name, 1)
+                    } else {
+                        panic!("Cannot dereference non-reference value");
+                    }
+                }
+            },
 
             Expr::BinaryOp { left, op, right } => {
                 let l = self.eval_expr(*left);
@@ -143,141 +231,42 @@ impl Interpreter {
             Expr::Call { callee, args } => {
                 if let Expr::Identifier(name) = *callee {
                     if name == "print" {
-                        let vals: Vec<Value> =
-                            args.into_iter().map(|arg| self.eval_expr(arg)).collect();
-                        for val in &vals {
-                            println!("{:?}", val);
+                        // print builtin
+                        for arg in args {
+                            let v = self.eval_expr(arg);
+                            println!("{:?}", v);
                         }
                         Value::Null
                     } else {
-                        // 1. Extraire les données de la fonction avant toute mutation
-                        let (params, return_type, body) = {
-                            let func = self
-                                .functions
-                                .get(&name)
-                                .expect(&format!("Function '{}' not found", name));
-                            (
-                                func.params.clone(),
-                                func.return_type.clone(),
-                                func.body.clone(),
-                            )
-                        };
-
-                        // 2. Évaluer les arguments APRÈS avoir libéré l'emprunt
-                        let args_eval: Vec<Value> =
-                            args.into_iter().map(|a| self.eval_expr(a)).collect();
-
-                        // 3. Vérification des types des arguments
-                        for (i, (_, param_type)) in params.iter().enumerate() {
-                            match (&args_eval[i], param_type) {
-                                (Value::Int(_), Type::Int) => (),
-                                (Value::String(_), Type::String) => (),
-                                (
-                                    Value::Reference {
-                                        name,
-                                        mutable: arg_mutable,
-                                    },
-                                    Type::Reference {
-                                        inner,
-                                        mutable: param_mutable,
-                                    },
-                                ) => {
-                                    if arg_mutable != param_mutable {
-                                        panic!(
-                                            "Mutability mismatch for reference argument {}: expected &{}mut, got &{}mut",
-                                            i,
-                                            if *param_mutable { "" } else { "!" },
-                                            if *arg_mutable { "" } else { "!" },
-                                        );
-                                    }
-                                }
-                                _ => panic!("Type mismatch for argument {}", i),
-                            }
+                        let func = self.functions.get(&name).unwrap().clone();
+                        // Evaluate arguments
+                        let mut evaluated = Vec::new();
+                        for arg in args {
+                            evaluated.push(self.eval_expr(arg));
                         }
 
-                        // 4. Préparer le nouvel environnement
-                        let new_env: HashMap<String, Value> = params
-                            .iter()
-                            .zip(args_eval.iter())
-                            .map(|((name, _), val)| (name.clone(), val.clone()))
-                            .collect();
+                        // Create new stack frame
+                        let mut new_frame = HashMap::new();
+                        for ((pname, _), argval) in func.params.iter().zip(evaluated.iter()) {
+                            new_frame.insert(pname.clone(), argval.clone());
+                        }
 
-                        // 5. Sauvegarder et remplacer l'environnement
-                        let old_env = std::mem::replace(&mut self.env, new_env);
-
-                        // 6. Exécuter le corps de la fonction
-                        self.in_function = true;
-                        let mut return_value = Value::Null;
-                        for stmt in body {
+                        // Push frame and execute function
+                        self.stack.push(new_frame);
+                        let mut result = Value::Null;
+                        for stmt in func.body {
                             match stmt {
-                                Stmt::Let {
-                                    mutable,
-                                    name,
-                                    expected_type,
-                                    expression,
-                                } => {
-                                    // Exécuter les déclarations let
-                                    let val = self.eval_expr(expression);
-                                    self.env.insert(name, val);
-                                }
-
-                                Stmt::Assignment { target, expression } => {
-                                    let rhs = self.eval_expr(expression);
-                                    match target {
-                                        // a = expr
-                                        Expr::Identifier(name) => {
-                                            let slot = self
-                                                .env
-                                                .get_mut(&name)
-                                                .expect(&format!("Unknown variable: {}", name));
-                                            *slot = rhs;
-                                        }
-                                        // *a = expr
-                                        Expr::UnaryOp {
-                                            op: UnaryOp::Deref,
-                                            expr,
-                                        } => {
-                                            if let Expr::Identifier(name) = *expr {
-                                                let slot = self
-                                                    .env
-                                                    .get_mut(&name)
-                                                    .expect(&format!("Unknown variable: {}", name));
-                                                *slot = rhs;
-                                            } else {
-                                                panic!("Invalid l-value in deref assignment");
-                                            }
-                                        }
-
-                                        other => {
-                                            panic!("Invalid assignment target: {:?}", other);
-                                        }
-                                    }
-                                }
-
                                 Stmt::Expr(e) => {
-                                    return_value = self.eval_expr(e);
+                                    result = self.eval_expr(e);
                                 }
-                                _ => panic!("Unknown expression"),
+                                _ => {
+                                    self.run_stmt(stmt);
+                                }
                             }
                         }
                         self.in_function = false;
-
-                        // 7. Vérifier le type de retour
-                        match (&return_value, &return_type) {
-                            (Value::Int(_), Type::Int) => (),
-                            (Value::String(_), Type::String) => (),
-                            (Value::Null, Type::Null) => (),
-                            _ => panic!("Return type mismatch"),
-                        }
-
-                        if return_type == Type::Null {
-                            return_value = Value::Null;
-                        }
-
-                        // 8. Restaurer l'environnement précédent
-                        self.env = old_env;
-
-                        return_value
+                        self.stack.pop();
+                        result
                     }
                 } else {
                     panic!("Cannot call non-identifier expression");
