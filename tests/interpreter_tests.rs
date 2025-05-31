@@ -23,9 +23,16 @@ fn test_interpreter_variable_declaration() {
 }
 
 #[test]
+fn test_interpreter_variable_declaration_string() {
+    let interpreter = run("let a = \"word\"");
+
+    assert_eq!(interpreter.lookup("a"), Value::String("word".to_string()));
+}
+
+#[test]
 fn test_interpreter_assignment() {
     let interpreter = run("
-let a = 1
+let mut a = 1
 a = a + 1");
 
     assert_eq!(interpreter.lookup("a"), Value::Int(2));
