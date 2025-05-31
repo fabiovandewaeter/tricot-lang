@@ -24,14 +24,8 @@ fn main() {
     print(a)
 }*/
 
-/*fn main(){
-    let mut a = 1
-    a = "word"
-    print(a)
-}*/
 let mut a = 1
-a = "word"
-
+print(a)
 
 
 //main()
