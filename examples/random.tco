@@ -1,18 +1,3 @@
-/*
-fn add(a: Int, b: Int) -> Int {
-    a + b
-}
-
-fn main() {
-    let a = 10 * 456
-    print(a + 1)
-    print("TEST")
-    let b = add(1, 1)
-    print(b)
-}
-*/
-
-
 /*fn incr(a: &mut Int) {
     *a = *a + 1
 }
@@ -24,16 +9,10 @@ fn main() {
     print(a)
 }*/
 
-let mut a = 1
-print(a)
-
+/*let mut a = 1
+print(a)*/
 
 //main()
-
-
-
-
-
 
 // cascade
 /*
@@ -51,3 +30,14 @@ let player =
   |> add(Health(100, 100))
   |> yourself
 */
+
+/*let mut a = 1
+a += 1
+print(a)*/
+
+fn incr(a: &mut Int) {
+    *a += 1
+}
+let mut a = 1
+incr(&mut a)
+print(a)

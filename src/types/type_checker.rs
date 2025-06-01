@@ -1,12 +1,9 @@
-use std::collections::HashMap;
-
-use crate::parser::ast::{Expr, Function, Program, Stmt, UnaryOp};
-
 use super::types::Type;
+use crate::parser::ast::{BinaryOp, Expr, Function, Program, Stmt, UnaryOp};
+use std::collections::HashMap;
 
 struct TypeContext {
     functions: HashMap<String, Function>,
-    /// name -> (Type, mutable)
     variables: HashMap<String, (Type, bool)>,
 }
 
@@ -18,60 +15,74 @@ impl TypeContext {
         }
     }
 
-    /// faire qu'on a soit le type de l'expression soit si c'est genre un call on regarde le type de retour de la fonction
     fn infer_type(&self, expression: &Expr) -> Type {
         match expression {
             Expr::Number(_) => Type::Int,
-
             Expr::StringLiteral(_) => Type::String,
 
-            Expr::Identifier(name) => {
-                if let Some(variable_info) = self.variables.get(name) {
-                    variable_info.0.clone() // variable_info is a tuple of type (Type, bool)
-                } else {
-                    panic!("Undefined variable: {}", name)
-                }
-            }
+            Expr::Identifier(name) => self
+                .variables
+                .get(name)
+                .map(|(ty, _)| ty.clone())
+                .unwrap_or_else(|| panic!("Undefined variable: {}", name)),
 
-            Expr::UnaryOp { op, expr } => {
-                let inner_type = self.infer_type(expr);
-                match op {
-                    UnaryOp::Deref => {
-                        if let Type::Reference { inner, mutable } = inner_type {
-                            *inner
-                        } else {
-                            panic!("Canno dereference non-reference type: {:?}", inner_type)
-                        }
-                    }
-                    UnaryOp::AddrOf(mutable) => Type::Reference {
-                        inner: Box::new(inner_type),
-                        mutable: *mutable,
-                    },
-                }
-            }
+            Expr::UnaryOp { op, expr } => self.infer_unary_type(op, expr),
+            Expr::BinaryOp { left, op, right } => self.infer_binary_type(left, op, right),
+            Expr::Call { callee, args } => self.infer_call_type(callee, args),
+        }
+    }
 
-            Expr::BinaryOp { left, op, right } => {
-                let l_type = self.infer_type(&left);
-                let r_type = self.infer_type(&right);
-                if l_type == r_type {
-                    l_type
-                } else {
-                    panic!("Error types BinaryOp : {:?} {:?}", l_type, r_type)
-                }
-            }
+    fn infer_unary_type(&self, op: &UnaryOp, expr: &Expr) -> Type {
+        let inner_type = self.infer_type(expr);
+        match op {
+            UnaryOp::Deref => match inner_type {
+                Type::Reference { inner, mutable: _ } => *inner,
+                _ => panic!("Cannot dereference non-reference type: {:?}", inner_type),
+            },
+            UnaryOp::AddrOf(mutable) => Type::Reference {
+                inner: Box::new(inner_type),
+                mutable: *mutable,
+            },
+        }
+    }
 
-            Expr::Call { callee, args } => {
-                if let Expr::Identifier(function_name) = &**callee {
-                    self.functions
-                        .get(function_name)
-                        .expect(&format!("Function '{}' not found", function_name))
-                        .return_type
-                        .clone()
-                } else {
-                    panic!("{}", "Callee isn't an Identifier")
-                }
+    fn infer_binary_type(&self, left: &Expr, op: &BinaryOp, right: &Expr) -> Type {
+        let l_type = self.infer_type(left);
+        let r_type = self.infer_type(right);
+
+        if l_type != r_type {
+            panic!(
+                "Type mismatch in binary operation: {:?} {:?} {:?}",
+                l_type, op, r_type
+            );
+        }
+
+        l_type
+    }
+
+    fn infer_call_type(&self, callee: &Expr, args: &[Expr]) -> Type {
+        let function_name = match callee {
+            Expr::Identifier(id) => id,
+            _ => panic!("Callee must be an identifier"),
+        };
+
+        let function = self
+            .functions
+            .get(function_name)
+            .unwrap_or_else(|| panic!("Function '{}' not found", function_name));
+
+        // Vérifier les arguments
+        for (i, (arg, param)) in args.iter().zip(function.params.iter()).enumerate() {
+            let arg_type = self.infer_type(arg);
+            if arg_type != param.1 {
+                panic!(
+                    "Argument {} mismatch in call to '{}': expected {:?}, found {:?}",
+                    i, function_name, param.1, arg_type
+                );
             }
         }
+
+        function.return_type.clone()
     }
 
     fn is_expr_mutable(&self, expr: &Expr) -> bool {
@@ -81,6 +92,7 @@ impl TypeContext {
                 .get(name)
                 .map(|(_, mutable)| *mutable)
                 .unwrap_or(false),
+
             Expr::UnaryOp {
                 op: UnaryOp::Deref,
                 expr,
@@ -92,21 +104,47 @@ impl TypeContext {
                     false
                 }
             }
+
             _ => false,
+        }
+    }
+
+    fn resolve_lvalue_type(&self, expr: &Expr) -> Type {
+        match expr {
+            Expr::Identifier(name) => self
+                .variables
+                .get(name)
+                .map(|(ty, _)| ty.clone())
+                .unwrap_or_else(|| panic!("Undefined variable: {}", name)),
+
+            Expr::UnaryOp {
+                op: UnaryOp::Deref,
+                expr,
+            } => {
+                let ty = self.infer_type(expr);
+                if let Type::Reference { inner, .. } = ty {
+                    *inner.clone()
+                } else {
+                    panic!("Cannot dereference non-reference type")
+                }
+            }
+
+            _ => panic!("Invalid l-value expression: {:?}", expr),
         }
     }
 }
 
-pub struct TypeChecker {}
+pub struct TypeChecker;
 
 impl TypeChecker {
     pub fn new() -> Self {
-        Self {}
+        Self
     }
 
     pub fn check(&mut self, prog: &mut Program) {
-        // add all functions to global context
         let mut global_context = TypeContext::new();
+
+        // Enregistrer les fonctions
         for stmt in &prog.statements {
             if let Stmt::Function(func) = stmt {
                 global_context
@@ -115,6 +153,7 @@ impl TypeChecker {
             }
         }
 
+        // Vérifier les déclarations
         for stmt in &prog.statements {
             match stmt {
                 Stmt::Function(func) => self.check_function(&global_context, func),
@@ -124,21 +163,37 @@ impl TypeChecker {
     }
 
     fn check_function(&self, global_context: &TypeContext, function: &Function) {
-        // local context start as a copy of global_context
         let mut local_context = TypeContext {
             functions: global_context.functions.clone(),
             variables: HashMap::new(),
         };
 
-        // add parameters as variables in the local context
-        for (param_name, param_type) in &function.params {
+        // Ajouter les paramètres
+        for (name, ty) in &function.params {
             local_context
                 .variables
-                .insert(param_name.clone(), (param_type.clone(), false));
+                .insert(name.clone(), (ty.clone(), false));
         }
 
+        // Vérifier le corps
         for stmt in &function.body {
             self.check_stmt(&mut local_context, stmt);
+        }
+
+        // Vérifier le type de retour
+        let last_expr = function.body.last();
+        if function.return_type != Type::Null {
+            if let Some(Stmt::Expr(expr)) = last_expr {
+                let actual_type = local_context.infer_type(expr);
+                if actual_type != function.return_type {
+                    panic!(
+                        "Return type mismatch in {}: expected {:?}, found {:?}",
+                        function.name, function.return_type, actual_type
+                    );
+                }
+            } else {
+                panic!("Function {} should return a value", function.name);
+            }
         }
     }
 
@@ -147,107 +202,113 @@ impl TypeChecker {
             Stmt::Let {
                 mutable,
                 name,
-                expected_type,
                 expression,
-            } => {
-                let inferred_type = context.infer_type(expression);
-                // check if the type of the expression and the expected type are the same
-                if *expected_type != Type::UNDEFINED && *expected_type != inferred_type {
-                    panic!(
-                        "Type mismatch for '{}': expected '{:?}' but found '{:?}'",
-                        name, expected_type, inferred_type
-                    );
-                }
-                // else, add variable to context
-                context
-                    .variables
-                    .insert(name.clone(), (inferred_type, mutable.clone()));
-            }
+                expected_type,
+            } => self.check_variable_declaration(context, mutable, name, expression, expected_type),
 
             Stmt::Assignment { target, expression } => {
-                self.check_expr(context, target);
-                self.check_expr(context, expression);
-
-                // get the name of the variable to assign the value to
-                let var_name = match target {
-                    // a = expr
-                    Expr::Identifier(name) => name.clone(),
-                    // *a = expr
-                    Expr::UnaryOp {
-                        op: UnaryOp::Deref,
-                        expr,
-                    } => {
-                        if let Expr::Identifier(name) = &**expr {
-                            name.clone()
-                        } else {
-                            panic!("Invalid l-value: cannot deref non-identifier");
-                        }
-                    }
-                    _ => panic!("Invalid assigment target: {:?}", target),
-                };
-                // get informations on the variable
-                let (declared_type, declared_mutable) = context.variables.get(&var_name).unwrap();
-
-                // checks if variable is mutable
-                if let Expr::UnaryOp {
-                    op: UnaryOp::Deref,
-                    expr,
-                } = target
-                {
-                    // *a = expr
-                    match declared_type {
-                        Type::Reference { inner, mutable } if *mutable => {}
-                        other => {
-                            panic!("Cannot assign through immutable reference, got {:?}", other);
-                        }
-                    }
-                } else {
-                    // a = expr
-                    if !*declared_mutable {
-                        panic!("Cannot assign to immutable variable: {}", var_name);
-                    }
-                }
-
-                // checks variable type
-                let rhs_type = context.infer_type(expression);
-                // if &mut T, extract T
-                let expected = match declared_type {
-                    Type::Reference { inner, mutable } => *inner.clone(),
-                    other => other.clone(),
-                };
-                println!("TEST {:?} {:?} {:?}", expected, rhs_type, declared_type);
-                if rhs_type != expected {
-                    println!("{:?}", stmt);
-                    panic!(
-                        "Type mismatch for '{}': expected '{:?}' but found '{:?}'",
-                        var_name, declared_type, rhs_type
-                    );
-                }
+                self.check_assignment(context, target, expression)
             }
 
+            Stmt::CompoundAssignment {
+                target,
+                op,
+                expression,
+            } => self.check_compound_assignment(context, target, op, expression),
+
             Stmt::Expr(expr) => self.check_expr(context, expr),
+            Stmt::Function(_) => (), // Déjà géré
 
-            Stmt::Function(_) => {}
+            _ => panic!("Unsupported statement: {:?}", stmt),
+        }
+    }
 
-            _ => unreachable!("Error in TypeChecker::check_stmt()"),
+    fn check_variable_declaration(
+        &self,
+        context: &mut TypeContext,
+        mutable: &bool,
+        name: &str,
+        expression: &Expr,
+        expected_type: &Type,
+    ) {
+        self.check_expr(context, expression);
+        let inferred_type = context.infer_type(expression);
+
+        if *expected_type != Type::UNDEFINED && *expected_type != inferred_type {
+            panic!(
+                "Type mismatch for '{}': expected '{:?}' but found '{:?}'",
+                name, expected_type, inferred_type
+            );
+        }
+
+        context
+            .variables
+            .insert(name.to_string(), (inferred_type, *mutable));
+    }
+
+    fn check_assignment(&self, context: &mut TypeContext, target: &Expr, expression: &Expr) {
+        self.check_expr(context, target);
+        self.check_expr(context, expression);
+
+        if !context.is_expr_mutable(target) {
+            panic!("Cannot assign to immutable expression: {:?}", target);
+        }
+
+        let target_type = context.resolve_lvalue_type(target);
+        let expr_type = context.infer_type(expression);
+
+        if target_type != expr_type {
+            panic!(
+                "Assignment type mismatch: expected {:?}, found {:?}",
+                target_type, expr_type
+            );
+        }
+    }
+
+    fn check_compound_assignment(
+        &self,
+        context: &mut TypeContext,
+        target: &Expr,
+        op: &BinaryOp,
+        expression: &Expr,
+    ) {
+        self.check_expr(context, target);
+        self.check_expr(context, expression);
+
+        if !context.is_expr_mutable(target) {
+            panic!("Cannot assign to immutable expression in compound assignment");
+        }
+
+        let target_type = context.resolve_lvalue_type(target);
+        let expr_type = context.infer_type(expression);
+
+        if target_type != expr_type {
+            panic!(
+                "Type mismatch in compound assignment: expected {:?}, found {:?}",
+                target_type, expr_type
+            );
+        }
+
+        // Vérifier que l'opération est valide pour le type
+        if target_type != Type::Int {
+            panic!("Compound operations only supported for integers");
         }
     }
 
     fn check_expr(&self, context: &mut TypeContext, expr: &Expr) {
         match expr {
-            Expr::UnaryOp { op, expr } => {
-                self.check_expr(context, expr);
-                match op {
-                    UnaryOp::AddrOf(true) => {
-                        if !context.is_expr_mutable(expr) {
-                            panic!("Cannot borrow immutable expression as mutable: {:?}", expr);
-                        }
-                    }
-                    _ => {}
+            Expr::UnaryOp {
+                op: UnaryOp::AddrOf(true),
+                expr,
+            } => {
+                if !context.is_expr_mutable(expr) {
+                    panic!("Cannot borrow immutable expression as mutable: {:?}", expr);
                 }
+                self.check_expr(context, expr);
             }
 
-            Expr::BinaryOp { left, op: _, right } => {
+            Expr::UnaryOp { expr, .. } => self.check_expr(context, expr),
+            Expr::BinaryOp { left, right, .. } => {
                 self.check_expr(context, left);
                 self.check_expr(context, right);
             }
@@ -258,6 +319,7 @@ impl TypeChecker {
                     self.check_expr(context, arg);
                 }
             }
+
             _ => (),
         }
     }

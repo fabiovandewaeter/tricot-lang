@@ -24,6 +24,19 @@ pub enum Token {
     #[token("String")]
     StringType,
 
+    // ECS
+    /*#[token("comp")]
+    Component,
+    #[token("res")]
+    Resource,
+    #[token("sys")]
+    System,
+    #[token("schedule")]
+    Schedule,
+    #[token("seq")]
+    Sequential,
+    #[token("par")]
+    Parallel,*/
     #[token("fn")]
     Fn,
     #[token("->")]
@@ -49,6 +62,14 @@ pub enum Token {
     Slash,
     #[token("=")]
     Assign,
+    #[token("+=")]
+    AssignPlus,
+    #[token("-=")]
+    AssignMinus,
+    #[token("*=")]
+    AssignStar,
+    #[token("/=")]
+    AssignSlash,
 
     #[token("==")]
     Equal,

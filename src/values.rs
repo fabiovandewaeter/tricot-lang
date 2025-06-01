@@ -11,7 +11,11 @@ pub enum Value {
     Null,
     Int(i64),
     String(String),
-    Reference { name: String, mutable: bool },
+    Reference {
+        name: String,
+        mutable: bool,
+        depth_at_creation: usize,
+    },
 }
 
 impl Value {

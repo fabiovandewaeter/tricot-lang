@@ -61,6 +61,11 @@ pub enum Stmt {
         target: Expr,
         expression: Expr,
     },
+    CompoundAssignment {
+        target: Expr,
+        op: BinaryOp,
+        expression: Expr,
+    },
     Function(Function),
 }
 

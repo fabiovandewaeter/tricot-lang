@@ -1,6 +1,6 @@
 use std::{env, error::Error, fs};
 
-use interpreter::interpreter::Interpreter;
+use interpreter::Interpreter;
 use lexer::Token;
 use logos::Logos;
 use parser::parser::Parser;
