@@ -3,7 +3,7 @@ use tricot_lang::{lexer::Token, parser::parser::Parser, types::type_checker::Typ
 
 fn check(input: &str) {
     let tokens = Token::lexer(input).map(|t| t.unwrap()).collect();
-    let mut parser = Parser::new(tokens, false);
+    let mut parser = Parser::new(tokens);
     let mut program = parser.parse_program();
     let mut type_checker = TypeChecker::new();
     type_checker.check(&mut program);

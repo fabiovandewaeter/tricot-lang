@@ -3,34 +3,17 @@ use std::collections::HashMap;
 use crate::{lexer::Token, types::types::Type};
 
 use super::ast::{
-    BinaryOp, ComponentDeclaration, Expr, Field, Function, Program, ResourceDeclaration, Stmt,
-    UnaryOp,
+    BinaryOp, Component, Expr, Field, Function, Param, Program, Resource, Stmt, System, UnaryOp,
 };
 
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
-    functions: HashMap<String, Function>,
-    include_builtins: bool,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>, include_builtins: bool) -> Self {
-        Self {
-            tokens,
-            pos: 0,
-            functions: HashMap::new(),
-            include_builtins,
-        }
-    }
-
-    fn get_builtins() -> Vec<Function> {
-        vec![Function {
-            name: "print".into(),
-            params: vec![("value".into(), Type::String)],
-            return_type: Type::Null,
-            body: Vec::new(),
-        }]
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Self { tokens, pos: 0 }
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -47,12 +30,6 @@ impl Parser {
     pub fn parse_program(&mut self) -> Program {
         // the whole program is like a giant block of Stmt
         let stmts = self.parse_block();
-
-        if self.include_builtins {
-            for func in Self::get_builtins() {
-                self.functions.insert(func.name.clone(), func);
-            }
-        }
 
         Program { statements: stmts }
     }
@@ -73,19 +50,21 @@ impl Parser {
         match self.peek() {
             Some(Token::Component) => self.parse_component(),
             Some(Token::Resource) => self.parse_resource(),
+            Some(Token::System) => self.parse_system(),
             Some(Token::Fn) => self.parse_function(),
             Some(Token::Let) => self.parse_variable_declaration(),
             _ => self.parse_expression_or_assignment(),
         }
     }
 
+    // ----------------- ECS -----------------
     fn parse_component(&mut self) -> Stmt {
         self.expect(Token::Component);
         let name = self.expect_identifier("component name");
 
         let fields = self.parse_fields();
 
-        Stmt::ComponentDeclaration(ComponentDeclaration {
+        Stmt::Component(Component {
             name: name.clone(),
             fields,
         })
@@ -97,7 +76,7 @@ impl Parser {
 
         let fields = self.parse_fields();
 
-        Stmt::ResourceDeclaration(ResourceDeclaration {
+        Stmt::Resource(Resource {
             name: name.clone(),
             fields,
         })
@@ -127,6 +106,26 @@ impl Parser {
         fields
     }
 
+    fn parse_system(&mut self) -> Stmt {
+        self.expect(Token::Fn);
+        let name = self.expect_identifier("system name");
+
+        let params = self.parse_parameters();
+
+        self.expect(Token::CurlyBraceOpen);
+        let body = self.parse_block();
+        self.expect(Token::CurlyBraceClose);
+
+        let system = System {
+            name: name.clone(),
+            params,
+            body: body,
+        };
+
+        Stmt::System(system)
+    }
+    // ---------------------------------------
+
     fn parse_function(&mut self) -> Stmt {
         self.expect(Token::Fn);
         let name = self.expect_identifier("function name");
@@ -144,19 +143,28 @@ impl Parser {
             return_type,
             body: body,
         };
-        self.functions.insert(name, function.clone());
+
         Stmt::Function(function)
     }
 
-    fn parse_parameters(&mut self) -> Vec<(String, Type)> {
+    fn parse_parameters(&mut self) -> Vec<Param> {
         self.expect(Token::ParenthesisOpen);
         let mut params = Vec::new();
 
         while self.peek() != Some(&Token::ParenthesisClose) {
             let name = self.expect_identifier("function parameter");
             self.expect(Token::Colon);
+            let mutable = if self.consume_if(Token::Mut) {
+                true
+            } else {
+                false
+            };
             let param_type = self.parse_type();
-            params.push((name, param_type));
+            params.push(Param {
+                name,
+                mutable,
+                param_type,
+            });
 
             if !self.consume_if(Token::Comma) {
                 break;

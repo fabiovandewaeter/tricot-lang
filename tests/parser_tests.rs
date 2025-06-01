@@ -2,7 +2,7 @@ use logos::Logos;
 use tricot_lang::{
     lexer::Token,
     parser::{
-        ast::{Expr, Field, Stmt},
+        ast::{Expr, Field, Param, Stmt},
         parser::Parser,
     },
     types::types::Type,
@@ -10,7 +10,7 @@ use tricot_lang::{
 
 fn parse(input: &str) -> Vec<Stmt> {
     let tokens = Token::lexer(input).map(|t| t.unwrap()).collect();
-    let mut parser = Parser::new(tokens, false);
+    let mut parser = Parser::new(tokens);
     parser.parse_program().statements
 }
 
@@ -18,7 +18,7 @@ fn parse(input: &str) -> Vec<Stmt> {
 fn test_parse_variable_declaration() {
     let statements = parse("let mut x = 42");
 
-    assert_eq!(statements.len(), 1,);
+    assert_eq!(statements.len(), 1);
 
     let Stmt::Let {
         mutable,
@@ -50,7 +50,7 @@ fn test_parse_function_declaration() {
 }",
     );
 
-    assert_eq!(statements.len(), 1,);
+    assert_eq!(statements.len(), 1);
 
     let Stmt::Function(function) = &statements[0] else {
         panic!("Should have been a Stmt::Function : {:?}", statements[0]);
@@ -60,13 +60,14 @@ fn test_parse_function_declaration() {
 
     assert_eq!(
         function.params[0],
-        (
-            "a".to_string(),
-            Type::Reference {
+        Param {
+            name: "a".to_string(),
+            mutable: false,
+            param_type: Type::Reference {
                 inner: Box::new(Type::Int),
                 mutable: true
             }
-        )
+        }
     );
 
     let Type::Int = function.return_type else {
@@ -79,45 +80,36 @@ fn test_parse_function_declaration() {
 fn test_parse_component_declaration_with_unnamed_fields() {
     let statements = parse("comp Example(String, Int)");
 
-    assert_eq!(statements.len(), 1,);
+    assert_eq!(statements.len(), 1);
 
-    let Stmt::ComponentDeclaration(component_declaration) = &statements[0] else {
-        panic!(
-            "Should have been a Stmt::ComponentDeclaration : {:?}",
-            statements[0]
-        );
+    let Stmt::Component(component) = &statements[0] else {
+        panic!("Should have been a Stmt::Component: {:?}", statements[0]);
     };
 
-    assert_eq!(component_declaration.name, "Example");
+    assert_eq!(component.name, "Example");
 
-    assert_eq!(
-        component_declaration.fields[0],
-        Field::Unnamed(Type::String)
-    );
-    assert_eq!(component_declaration.fields[1], Field::Unnamed(Type::Int));
+    assert_eq!(component.fields[0], Field::Unnamed(Type::String));
+    assert_eq!(component.fields[1], Field::Unnamed(Type::Int));
 }
 
 #[test]
 fn test_parse_component_declaration_with_named_fields() {
     let statements = parse("comp Position(x: Int, y: Int)");
 
-    assert_eq!(statements.len(), 1,);
+    assert_eq!(statements.len(), 1);
 
-    let Stmt::ComponentDeclaration(component_declaration) = &statements[0] else {
-        panic!(
-            "Should have been a Stmt::ComponentDeclaration : {:?}",
-            statements[0]
-        );
+    let Stmt::Component(component) = &statements[0] else {
+        panic!("Should have been a Stmt::Component: {:?}", statements[0]);
     };
 
-    assert_eq!(component_declaration.name, "Position");
+    assert_eq!(component.name, "Position");
 
     assert_eq!(
-        component_declaration.fields[0],
+        component.fields[0],
         Field::Named("x".to_string(), Type::Int)
     );
     assert_eq!(
-        component_declaration.fields[1],
+        component.fields[1],
         Field::Named("y".to_string(), Type::Int)
     );
 }
@@ -126,42 +118,73 @@ fn test_parse_component_declaration_with_named_fields() {
 fn test_parse_resource_declaration_with_unnamed_fields() {
     let statements = parse("res Resource(String, Int)");
 
-    assert_eq!(statements.len(), 1,);
+    assert_eq!(statements.len(), 1);
 
-    let Stmt::ResourceDeclaration(resource_declaration) = &statements[0] else {
+    let Stmt::Resource(resource) = &statements[0] else {
         panic!(
             "Should have been a Stmt::ResourceDeclaration : {:?}",
             statements[0]
         );
     };
 
-    assert_eq!(resource_declaration.name, "Resource");
+    assert_eq!(resource.name, "Resource");
 
-    assert_eq!(resource_declaration.fields[0], Field::Unnamed(Type::String));
-    assert_eq!(resource_declaration.fields[1], Field::Unnamed(Type::Int));
+    assert_eq!(resource.fields[0], Field::Unnamed(Type::String));
+    assert_eq!(resource.fields[1], Field::Unnamed(Type::Int));
 }
 
 #[test]
 fn test_parse_resource_declaration_with_named_fields() {
     let statements = parse("res Resource(x: Int, y: Int)");
 
-    assert_eq!(statements.len(), 1,);
+    assert_eq!(statements.len(), 1);
 
-    let Stmt::ResourceDeclaration(resource_declaration) = &statements[0] else {
+    let Stmt::Resource(resource) = &statements[0] else {
         panic!(
             "Should have been a Stmt::ResourceDeclaration : {:?}",
             statements[0]
         );
     };
 
-    assert_eq!(resource_declaration.name, "Resource");
+    assert_eq!(resource.name, "Resource");
+
+    assert_eq!(resource.fields[0], Field::Named("x".to_string(), Type::Int));
+    assert_eq!(resource.fields[1], Field::Named("y".to_string(), Type::Int));
+}
+
+#[test]
+fn test_parse_system_with_implicit_loop() {
+    let statements = parse(
+        "comp Position(x: Int, y: Int)
+comp Velocity(dx: Int, dy: Int)
+sys move_entities(position: mut Position, velocity: Velocity) {
+    position.x += velocity.dx
+    position.y += velocity.dy
+}",
+    );
+
+    assert_eq!(statements.len(), 5);
+
+    let Stmt::System(system) = &statements[2] else {
+        panic!("Should have been a Stmt::System : {:?}", statements[0]);
+    };
+
+    assert_eq!(system.name, "move_entities");
 
     assert_eq!(
-        resource_declaration.fields[0],
-        Field::Named("x".to_string(), Type::Int)
+        system.params[0],
+        Param {
+            name: "Positin".to_string(),
+            mutable: true,
+            param_type: Type::Component("Position".into())
+        }
     );
     assert_eq!(
-        resource_declaration.fields[1],
-        Field::Named("y".to_string(), Type::Int)
+        system.params[1],
+        Param {
+            name: "Velocity".to_string(),
+            mutable: false,
+            param_type: Type::Component("Velocity".into())
+        }
     );
 }

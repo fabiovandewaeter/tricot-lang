@@ -67,18 +67,19 @@ pub enum Stmt {
         expression: Expr,
     },
     Function(Function),
-    ComponentDeclaration(ComponentDeclaration),
-    ResourceDeclaration(ResourceDeclaration),
+    Component(Component),
+    Resource(Resource),
+    System(System),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ComponentDeclaration {
+pub struct Component {
     pub name: String,
     pub fields: Vec<Field>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ResourceDeclaration {
+pub struct Resource {
     pub name: String,
     pub fields: Vec<Field>,
 }
@@ -90,9 +91,23 @@ pub enum Field {
 }
 
 #[derive(Debug, Clone)]
+pub struct System {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub body: Vec<Stmt>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Param {
+    pub name: String,
+    pub mutable: bool,
+    pub param_type: Type,
+}
+
+#[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
-    pub params: Vec<(String, Type)>,
+    pub params: Vec<Param>,
     pub return_type: Type,
     pub body: Vec<Stmt>,
 }

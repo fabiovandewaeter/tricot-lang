@@ -333,8 +333,16 @@ impl Interpreter {
 
         // Create new stack frame
         let mut frame = HashMap::new();
-        for ((param_name, _), value) in func.params.iter().zip(evaluated_args.iter()) {
-            frame.insert(param_name.clone(), value.clone());
+        for (
+            Param {
+                name,
+                mutable,
+                param_type,
+            },
+            value,
+        ) in func.params.iter().zip(evaluated_args.iter())
+        {
+            frame.insert(name.clone(), value.clone());
         }
 
         // Execute function body

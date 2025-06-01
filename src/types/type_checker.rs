@@ -1,5 +1,5 @@
 use super::types::Type;
-use crate::parser::ast::{BinaryOp, Expr, Function, Program, Stmt, UnaryOp};
+use crate::parser::ast::{BinaryOp, Expr, Function, Param, Program, Stmt, UnaryOp};
 use std::collections::HashMap;
 
 struct TypeContext {
@@ -74,10 +74,10 @@ impl TypeContext {
         // Vérifier les arguments
         for (i, (arg, param)) in args.iter().zip(function.params.iter()).enumerate() {
             let arg_type = self.infer_type(arg);
-            if arg_type != param.1 {
+            if arg_type != param.param_type {
                 panic!(
                     "Argument {} mismatch in call to '{}': expected {:?}, found {:?}",
-                    i, function_name, param.1, arg_type
+                    i, function_name, param.param_type, arg_type
                 );
             }
         }
@@ -169,10 +169,15 @@ impl TypeChecker {
         };
 
         // Ajouter les paramètres
-        for (name, ty) in &function.params {
+        for Param {
+            name,
+            param_type,
+            mutable: _,
+        } in &function.params
+        {
             local_context
                 .variables
-                .insert(name.clone(), (ty.clone(), false));
+                .insert(name.clone(), (param_type.clone(), false));
         }
 
         // Vérifier le corps
