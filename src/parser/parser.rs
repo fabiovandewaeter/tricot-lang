@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use crate::{lexer::Token, types::types::Type};
 
-use super::ast::{BinaryOp, Expr, Function, Program, Stmt, UnaryOp};
+use super::ast::{
+    BinaryOp, ComponentDeclaration, ComponentField, Expr, Function, Program, Stmt, UnaryOp,
+};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -66,12 +68,49 @@ impl Parser {
         stmts
     }
 
-    pub fn parse_statement(&mut self) -> Stmt {
+    fn parse_statement(&mut self) -> Stmt {
         match self.peek() {
+            Some(Token::Component) => self.parse_component(),
             Some(Token::Fn) => self.parse_function(),
             Some(Token::Let) => self.parse_variable_declaration(),
             _ => self.parse_expression_or_assignment(),
         }
+    }
+
+    fn parse_component(&mut self) -> Stmt {
+        self.expect(Token::Component);
+        let name = self.expect_identifier("component name");
+
+        let fields = self.parse_component_fields();
+
+        Stmt::ComponentDeclaration(ComponentDeclaration {
+            name: name.clone(),
+            fields,
+        })
+    }
+
+    fn parse_component_fields(&mut self) -> Vec<ComponentField> {
+        self.expect(Token::ParenthesisOpen);
+        let mut fields = Vec::new();
+
+        while self.peek() != Some(&Token::ParenthesisClose) {
+            let component_field = if let Token::Identifier(name) = self.peek().cloned().unwrap() {
+                self.next();
+                self.expect(Token::Colon);
+                ComponentField::Named(name.clone(), self.parse_type())
+            } else {
+                ComponentField::Unnamed(self.parse_type())
+            };
+
+            fields.push(component_field);
+
+            if !self.consume_if(Token::Comma) {
+                break;
+            }
+        }
+
+        self.expect(Token::ParenthesisClose);
+        fields
     }
 
     fn parse_function(&mut self) -> Stmt {
