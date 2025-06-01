@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use crate::{lexer::Token, types::types::Type};
 
 use super::ast::{
-    BinaryOp, ComponentDeclaration, ComponentField, Expr, Function, Program, Stmt, UnaryOp,
+    BinaryOp, ComponentDeclaration, Expr, Field, Function, Program, ResourceDeclaration, Stmt,
+    UnaryOp,
 };
 
 pub struct Parser {
@@ -71,6 +72,7 @@ impl Parser {
     fn parse_statement(&mut self) -> Stmt {
         match self.peek() {
             Some(Token::Component) => self.parse_component(),
+            Some(Token::Resource) => self.parse_resource(),
             Some(Token::Fn) => self.parse_function(),
             Some(Token::Let) => self.parse_variable_declaration(),
             _ => self.parse_expression_or_assignment(),
@@ -81,7 +83,7 @@ impl Parser {
         self.expect(Token::Component);
         let name = self.expect_identifier("component name");
 
-        let fields = self.parse_component_fields();
+        let fields = self.parse_fields();
 
         Stmt::ComponentDeclaration(ComponentDeclaration {
             name: name.clone(),
@@ -89,20 +91,32 @@ impl Parser {
         })
     }
 
-    fn parse_component_fields(&mut self) -> Vec<ComponentField> {
+    fn parse_resource(&mut self) -> Stmt {
+        self.expect(Token::Resource);
+        let name = self.expect_identifier("resource name");
+
+        let fields = self.parse_fields();
+
+        Stmt::ResourceDeclaration(ResourceDeclaration {
+            name: name.clone(),
+            fields,
+        })
+    }
+
+    fn parse_fields(&mut self) -> Vec<Field> {
         self.expect(Token::ParenthesisOpen);
         let mut fields = Vec::new();
 
         while self.peek() != Some(&Token::ParenthesisClose) {
-            let component_field = if let Token::Identifier(name) = self.peek().cloned().unwrap() {
+            let field = if let Token::Identifier(name) = self.peek().cloned().unwrap() {
                 self.next();
                 self.expect(Token::Colon);
-                ComponentField::Named(name.clone(), self.parse_type())
+                Field::Named(name.clone(), self.parse_type())
             } else {
-                ComponentField::Unnamed(self.parse_type())
+                Field::Unnamed(self.parse_type())
             };
 
-            fields.push(component_field);
+            fields.push(field);
 
             if !self.consume_if(Token::Comma) {
                 break;

@@ -2,7 +2,7 @@ use logos::Logos;
 use tricot_lang::{
     lexer::Token,
     parser::{
-        ast::{ComponentField, Expr, Stmt},
+        ast::{Expr, Field, Stmt},
         parser::Parser,
     },
     types::types::Type,
@@ -92,12 +92,9 @@ fn test_parse_component_declaration_with_unnamed_fields() {
 
     assert_eq!(
         component_declaration.fields[0],
-        ComponentField::Unnamed(Type::String)
+        Field::Unnamed(Type::String)
     );
-    assert_eq!(
-        component_declaration.fields[1],
-        ComponentField::Unnamed(Type::Int)
-    );
+    assert_eq!(component_declaration.fields[1], Field::Unnamed(Type::Int));
 }
 
 #[test]
@@ -117,10 +114,54 @@ fn test_parse_component_declaration_with_named_fields() {
 
     assert_eq!(
         component_declaration.fields[0],
-        ComponentField::Named("x".to_string(), Type::Int)
+        Field::Named("x".to_string(), Type::Int)
     );
     assert_eq!(
         component_declaration.fields[1],
-        ComponentField::Named("y".to_string(), Type::Int)
+        Field::Named("y".to_string(), Type::Int)
+    );
+}
+
+#[test]
+fn test_parse_resource_declaration_with_unnamed_fields() {
+    let statements = parse("res Resource(String, Int)");
+
+    assert_eq!(statements.len(), 1,);
+
+    let Stmt::ResourceDeclaration(resource_declaration) = &statements[0] else {
+        panic!(
+            "Should have been a Stmt::ResourceDeclaration : {:?}",
+            statements[0]
+        );
+    };
+
+    assert_eq!(resource_declaration.name, "Resource");
+
+    assert_eq!(resource_declaration.fields[0], Field::Unnamed(Type::String));
+    assert_eq!(resource_declaration.fields[1], Field::Unnamed(Type::Int));
+}
+
+#[test]
+fn test_parse_resource_declaration_with_named_fields() {
+    let statements = parse("res Resource(x: Int, y: Int)");
+
+    assert_eq!(statements.len(), 1,);
+
+    let Stmt::ResourceDeclaration(resource_declaration) = &statements[0] else {
+        panic!(
+            "Should have been a Stmt::ResourceDeclaration : {:?}",
+            statements[0]
+        );
+    };
+
+    assert_eq!(resource_declaration.name, "Resource");
+
+    assert_eq!(
+        resource_declaration.fields[0],
+        Field::Named("x".to_string(), Type::Int)
+    );
+    assert_eq!(
+        resource_declaration.fields[1],
+        Field::Named("y".to_string(), Type::Int)
     );
 }
