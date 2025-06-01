@@ -7,7 +7,7 @@ use tricot_lang::{
 fn run(input: &str) -> Interpreter {
     let tokens = Token::lexer(input).map(|t| t.unwrap()).collect();
     let mut parser = Parser::new(tokens, false);
-    let mut program = parser.parse_program(false);
+    let mut program = parser.parse_program();
     let mut type_checker = TypeChecker::new();
     type_checker.check(&mut program);
     let mut interpreter = Interpreter::new();

@@ -11,7 +11,7 @@ use tricot_lang::{
 fn parse(input: &str) -> Vec<Stmt> {
     let tokens = Token::lexer(input).map(|t| t.unwrap()).collect();
     let mut parser = Parser::new(tokens, false);
-    parser.parse_program(false).statements
+    parser.parse_program().statements
 }
 
 #[test]
@@ -32,6 +32,7 @@ fn test_parse_variable_declaration() {
 
     assert!(mutable);
     assert_eq!(name, "x");
+    assert_eq!(*expected_type, Type::UNDEFINED);
 
     let Expr::Number(value) = *expression else {
         panic!("Should have been a Expr::Number : {:?}", expression);

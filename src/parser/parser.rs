@@ -41,22 +41,29 @@ impl Parser {
         })
     }
 
-    pub fn parse_program(&mut self, in_block: bool) -> Program {
-        let mut stmts = Vec::new();
-        while let Some(tok) = self.peek() {
-            if in_block && *tok == Token::CurlyBraceClose {
-                break;
-            }
-            stmts.push(self.parse_statement());
-        }
+    pub fn parse_program(&mut self) -> Program {
+        // the whole program is like a giant block of Stmt
+        let stmts = self.parse_block();
 
-        if !in_block && self.include_builtins {
+        if self.include_builtins {
             for func in Self::get_builtins() {
                 self.functions.insert(func.name.clone(), func);
             }
         }
 
         Program { statements: stmts }
+    }
+
+    fn parse_block(&mut self) -> Vec<Stmt> {
+        let mut stmts = Vec::new();
+        while let Some(tok) = self.peek() {
+            if *tok == Token::CurlyBraceClose {
+                break;
+            }
+            stmts.push(self.parse_statement());
+        }
+
+        stmts
     }
 
     pub fn parse_statement(&mut self) -> Stmt {
@@ -75,14 +82,14 @@ impl Parser {
         let return_type = self.parse_return_type();
 
         self.expect(Token::CurlyBraceOpen);
-        let body = self.parse_program(true);
+        let body = self.parse_block();
         self.expect(Token::CurlyBraceClose);
 
         let function = Function {
             name: name.clone(),
             params,
             return_type,
-            body: body.statements,
+            body: body,
         };
         self.functions.insert(name, function.clone());
         Stmt::Function(function)

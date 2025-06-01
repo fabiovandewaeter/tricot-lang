@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let tokens: Vec<Token> = tokens_with_span.into_iter().map(|(tok, _)| tok).collect();
 
     let mut parser = Parser::new(tokens, true);
-    let mut program = parser.parse_program(false);
+    let mut program = parser.parse_program();
     let mut type_checker = TypeChecker::new();
 
     // display AST

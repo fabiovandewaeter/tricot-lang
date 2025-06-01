@@ -269,7 +269,7 @@ impl TypeChecker {
         &self,
         context: &mut TypeContext,
         target: &Expr,
-        op: &BinaryOp,
+        _op: &BinaryOp,
         expression: &Expr,
     ) {
         self.check_expr(context, target);
