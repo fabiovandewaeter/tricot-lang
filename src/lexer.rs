@@ -12,20 +12,13 @@ pub enum Token {
     #[regex(r"/\*([^*]|\*[^/])*\*/", logos::skip)] // multiple lines with /**/
     Comment,
 
-    #[regex(r"[0-9]+", |lex| lex.slice().to_string())]
-    Number(String),
-    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
-    Identifier(String),
-    #[regex(r#""([^"\\]|\\.)*""#, |lex| lex.slice()[1..lex.slice().len()-1].to_string())]
-    StringLiteral(String),
-
     #[token("Int")]
     IntType,
     #[token("String")]
     StringType,
 
     // ECS
-    /*#[token("comp")]
+    #[token("comp")]
     Component,
     #[token("res")]
     Resource,
@@ -36,7 +29,8 @@ pub enum Token {
     #[token("seq")]
     Sequential,
     #[token("par")]
-    Parallel,*/
+    Parallel,
+
     #[token("fn")]
     Fn,
     #[token("->")]
@@ -51,7 +45,12 @@ pub enum Token {
     Ampersand,
     #[token("mut")]
     Mut,
-
+    #[token(".")]
+    Dot,
+    /*#[token("for")]
+    For,
+    #[token("in")]
+    In,*/
     #[token("+")]
     Plus,
     #[token("-")]
@@ -92,4 +91,11 @@ pub enum Token {
     BracketOpen,
     #[token("]")]
     BracketClose,
+
+    #[regex(r"[0-9]+", |lex| lex.slice().to_string())]
+    Number(String),
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]
+    Identifier(String),
+    #[regex(r#""([^"\\]|\\.)*""#, |lex| lex.slice()[1..lex.slice().len()-1].to_string())]
+    StringLiteral(String),
 }

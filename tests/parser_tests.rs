@@ -72,3 +72,11 @@ fn test_parse_function_declaration() {
         panic!("Should have been a Type::Int : {:?}", function.return_type);
     };
 }
+
+// ECS
+#[test]
+fn test_parse_component_declaration() {
+    let statements = parse("comp Position(x: Int, y: Int)");
+
+    panic!();
+}

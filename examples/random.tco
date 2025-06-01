@@ -1,19 +1,3 @@
-/*fn incr(a: &mut Int) {
-    *a = *a + 1
-}
-
-fn main() {
-    let mut a = 1
-    print(a)
-    incr(&mut a)
-    print(a)
-}*/
-
-/*let mut a = 1
-print(a)*/
-
-//main()
-
 // cascade
 /*
 let d = 1
@@ -31,13 +15,26 @@ let player =
   |> yourself
 */
 
-/*let mut a = 1
-a += 1
-print(a)*/
-
-fn incr(a: &mut Int) {
+/*fn incr(a: &mut Int) {
     *a += 1
 }
 let mut a = 1
 incr(&mut a)
-print(a)
+print(a)*/
+
+comp Position(x: Int, y: Int)
+comp Velocity(dx: Int, dy: Int)
+comp Health(Int)
+
+res Time(Int)
+
+// implicit loop, parameters are outside (and just one query)
+sys move_entities(mut Position, Velocity) {
+    Position.x += Velocity.dx
+    Position.y += Velocity.dy
+}
+
+schedule {
+    physics_update,
+    health_system
+}

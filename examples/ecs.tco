@@ -4,23 +4,26 @@ comp Health(Int)
 
 res Time(Int)
 
-// implicit loop, parameters are outside
+// implicit loop, parameters are outside (and just one query)
 sys move_entities(mut Position, Velocity) {
     Position.x += Velocity.dx
     Position.y += Velocity.dy
 }
 
-// explicit loop
+// explicit loop with mutiple queries
 sys physics_update using (t: Time) {
-    for (mut pos: Position, vel: Velocity) in query {
-        pos.0 += vel.0 * t.0
-        pos.1 += vel.1 * t.0
+    with (Player, mut Position, Collider) as player,
+         (Enemy, Position, Collider) as enemy {
+        
+        if player.Collider.intersects(enemy.Collider) {
+            player.Health.damage(10)
+        }
     }
 }
 
 // can specify that the system is sequential
 seq sys health_system {
-    for (mut Health, Damage, ?Type) in query where Health > 0 {
+    with (mut Health, Damage, ?Type) as query where Health > 0 {
         Health -= Damage.amount
     }
 }
@@ -28,7 +31,7 @@ seq sys health_system {
 // can specify whether a sub-part is sequential or parallel
 sys producer_consumer {
     // parallel
-    par for (mut Source) => generate_items()
+    par with (mut Source) => generate_items()
     
     // sequential
     seq {
@@ -37,7 +40,7 @@ sys producer_consumer {
     }
     
     // parallel too
-    for (mut Consumer) => process_items()
+    with (mut Consumer) => process_items()
 }
 
 schedule {
