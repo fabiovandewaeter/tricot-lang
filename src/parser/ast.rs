@@ -67,6 +67,19 @@ pub enum Stmt {
         expression: Expr,
     },
     Function(Function),
+    ComponentDeclaration(ComponentDeclaration),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComponentDeclaration {
+    pub name: String,
+    pub fields: Vec<ComponentField>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ComponentField {
+    Named(String, Type),
+    Unnamed(Type),
 }
 
 #[derive(Debug, Clone)]

@@ -2,7 +2,7 @@ use logos::Logos;
 use tricot_lang::{
     lexer::Token,
     parser::{
-        ast::{Expr, Stmt},
+        ast::{ComponentField, Expr, Stmt},
         parser::Parser,
     },
     types::types::Type,
@@ -75,8 +75,51 @@ fn test_parse_function_declaration() {
 
 // ECS
 #[test]
-fn test_parse_component_declaration() {
+fn test_parse_component_declaration_with_unnamed_fields() {
+    let statements = parse("comp Example(String, Int)");
+
+    assert_eq!(statements.len(), 1,);
+
+    let Stmt::ComponentDeclaration(component_declaration) = &statements[0] else {
+        panic!(
+            "Should have been a Stmt::ComponentDeclaration : {:?}",
+            statements[0]
+        );
+    };
+
+    assert_eq!(component_declaration.name, "Example");
+
+    assert_eq!(
+        component_declaration.fields[0],
+        ComponentField::Unnamed(Type::String)
+    );
+    assert_eq!(
+        component_declaration.fields[1],
+        ComponentField::Unnamed(Type::Int)
+    );
+}
+
+#[test]
+fn test_parse_component_declaration_with_named_fields() {
     let statements = parse("comp Position(x: Int, y: Int)");
 
-    panic!();
+    assert_eq!(statements.len(), 1,);
+
+    let Stmt::ComponentDeclaration(component_declaration) = &statements[0] else {
+        panic!(
+            "Should have been a Stmt::ComponentDeclaration : {:?}",
+            statements[0]
+        );
+    };
+
+    assert_eq!(component_declaration.name, "Position");
+
+    assert_eq!(
+        component_declaration.fields[0],
+        ComponentField::Named("x".to_string(), Type::Int)
+    );
+    assert_eq!(
+        component_declaration.fields[1],
+        ComponentField::Named("y".to_string(), Type::Int)
+    );
 }
