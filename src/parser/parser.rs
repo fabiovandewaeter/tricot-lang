@@ -107,7 +107,7 @@ impl Parser {
     }
 
     fn parse_system(&mut self) -> Stmt {
-        self.expect(Token::Fn);
+        self.expect(Token::System);
         let name = self.expect_identifier("system name");
 
         let params = self.parse_parameters();

@@ -174,7 +174,7 @@ sys move_entities(position: mut Position, velocity: Velocity) {
     assert_eq!(
         system.params[0],
         Param {
-            name: "Positin".to_string(),
+            name: "Position".to_string(),
             mutable: true,
             param_type: Type::Component("Position".into())
         }
