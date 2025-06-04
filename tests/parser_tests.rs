@@ -163,7 +163,7 @@ sys move_entities(position: mut Position, velocity: Velocity) {
 }",
     );
 
-    assert_eq!(statements.len(), 5);
+    assert_eq!(statements.len(), 3);
 
     let Stmt::System(system) = &statements[2] else {
         panic!("Should have been a Stmt::System : {:?}", statements[0]);
@@ -174,7 +174,7 @@ sys move_entities(position: mut Position, velocity: Velocity) {
     assert_eq!(
         system.params[0],
         Param {
-            name: "Position".to_string(),
+            name: "position".to_string(),
             mutable: true,
             param_type: Type::Component("Position".into())
         }
@@ -182,7 +182,7 @@ sys move_entities(position: mut Position, velocity: Velocity) {
     assert_eq!(
         system.params[1],
         Param {
-            name: "Velocity".to_string(),
+            name: "velocity".to_string(),
             mutable: false,
             param_type: Type::Component("Velocity".into())
         }
