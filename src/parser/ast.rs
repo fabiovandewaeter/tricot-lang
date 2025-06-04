@@ -1,6 +1,6 @@
 use crate::{lexer::Token, types::types::Type};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Number(i64),
     StringLiteral(String),
@@ -20,7 +20,7 @@ pub enum Expr {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
     Deref, // `*expr`
     /// mutable
@@ -33,6 +33,7 @@ pub enum BinaryOp {
     Minus,
     Star,
     Slash,
+    Dot,
 }
 
 impl BinaryOp {
@@ -42,12 +43,13 @@ impl BinaryOp {
             Token::Minus => Ok(BinaryOp::Minus),
             Token::Star => Ok(BinaryOp::Star),
             Token::Slash => Ok(BinaryOp::Slash),
+            Token::Dot => Ok(BinaryOp::Dot),
             _ => unreachable!(),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
     Let {
@@ -57,7 +59,6 @@ pub enum Stmt {
         expression: Expr,
     },
     Assignment {
-        //name: String,
         target: Expr,
         expression: Expr,
     },
@@ -90,7 +91,7 @@ pub enum Field {
     Unnamed(Type),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct System {
     pub name: String,
     pub params: Vec<Param>,
@@ -104,7 +105,7 @@ pub struct Param {
     pub param_type: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: String,
     pub params: Vec<Param>,

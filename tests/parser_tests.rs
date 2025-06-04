@@ -2,7 +2,7 @@ use logos::Logos;
 use tricot_lang::{
     lexer::Token,
     parser::{
-        ast::{Expr, Field, Param, Stmt},
+        ast::{BinaryOp, Expr, Field, Param, Stmt},
         parser::Parser,
     },
     types::types::Type,
@@ -186,5 +186,62 @@ sys move_entities(position: mut Position, velocity: Velocity) {
             mutable: false,
             param_type: Type::Component("Velocity".into())
         }
+    );
+}
+
+#[test]
+fn test_parse_components_dot_operator() {
+    let statements = parse(
+        "comp Position(x: Int, y: Int)
+
+sys example(position: Position) {
+    print(position.x)
+    print(position.y)
+}",
+    );
+
+    assert_eq!(statements.len(), 2);
+
+    let Stmt::System(system) = &statements[1] else {
+        panic!("Should have been a Stmt::System: {:?}", statements[1]);
+    };
+
+    assert_eq!(system.name, "example");
+
+    assert_eq!(
+        system.params[0],
+        Param {
+            name: "position".to_string(),
+            mutable: false,
+            param_type: Type::Component("Position".into()),
+        }
+    );
+
+    assert_eq!(
+        system.body[0],
+        Stmt::Expr(Expr::Call {
+            callee: Box::new(Expr::Identifier("print".into())),
+            args: vec![
+                (Expr::BinaryOp {
+                    left: Box::new(Expr::Identifier("position".into())),
+                    op: BinaryOp::Dot,
+                    right: Box::new(Expr::Identifier("x".into()))
+                })
+            ],
+        })
+    );
+
+    assert_eq!(
+        system.body[1],
+        Stmt::Expr(Expr::Call {
+            callee: Box::new(Expr::Identifier("print".into())),
+            args: vec![
+                (Expr::BinaryOp {
+                    left: Box::new(Expr::Identifier("position".into())),
+                    op: BinaryOp::Dot,
+                    right: Box::new(Expr::Identifier("y".into()))
+                })
+            ],
+        })
     );
 }

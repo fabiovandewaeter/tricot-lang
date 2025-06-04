@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::{lexer::Token, types::types::Type};
+use crate::{
+    lexer::Token,
+    types::types::{ParamContext, Type},
+};
 
 use super::ast::{
     BinaryOp, Component, Expr, Field, Function, Param, Program, Resource, Stmt, System, UnaryOp,
@@ -110,7 +113,7 @@ impl Parser {
         self.expect(Token::System);
         let name = self.expect_identifier("system name");
 
-        let params = self.parse_parameters();
+        let params = self.parse_parameters(ParamContext::Component);
 
         self.expect(Token::CurlyBraceOpen);
         let body = self.parse_block();
@@ -130,7 +133,7 @@ impl Parser {
         self.expect(Token::Fn);
         let name = self.expect_identifier("function name");
 
-        let params = self.parse_parameters();
+        let params = self.parse_parameters(ParamContext::Struct);
         let return_type = self.parse_return_type();
 
         self.expect(Token::CurlyBraceOpen);
@@ -147,7 +150,7 @@ impl Parser {
         Stmt::Function(function)
     }
 
-    fn parse_parameters(&mut self) -> Vec<Param> {
+    fn parse_parameters(&mut self, param_context: ParamContext) -> Vec<Param> {
         self.expect(Token::ParenthesisOpen);
         let mut params = Vec::new();
 
@@ -159,7 +162,14 @@ impl Parser {
             } else {
                 false
             };
-            let param_type = self.parse_type();
+            let param_type = match self.parse_type() {
+                Type::Unresolved(name) => match param_context {
+                    ParamContext::Component => Type::Component(name),
+                    ParamContext::Resource => Type::Resource(name),
+                    ParamContext::Struct => Type::Struct(name),
+                },
+                other => other,
+            };
             params.push(Param {
                 name,
                 mutable,
@@ -351,6 +361,7 @@ fn precedence(tok: &Token) -> Option<(u8, bool)> {
     match tok {
         Token::Plus | Token::Minus => Some((1, false)),
         Token::Star | Token::Slash => Some((2, false)),
+        Token::Dot => Some((3, false)),
         _ => None,
     }
 }
