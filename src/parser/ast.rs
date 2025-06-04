@@ -71,6 +71,7 @@ pub enum Stmt {
     Component(Component),
     Resource(Resource),
     System(System),
+    Schedule(Schedule),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -96,6 +97,11 @@ pub struct System {
     pub name: String,
     pub params: Vec<Param>,
     pub resources: Vec<Param>,
+    pub body: Vec<Stmt>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Schedule {
     pub body: Vec<Stmt>,
 }
 

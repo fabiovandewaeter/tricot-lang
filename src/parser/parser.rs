@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     lexer::Token,
+    parser::ast::Schedule,
     types::types::{ParamContext, Type},
 };
 
@@ -54,6 +55,7 @@ impl Parser {
             Some(Token::Component) => self.parse_component(),
             Some(Token::Resource) => self.parse_resource(),
             Some(Token::System) => self.parse_system(),
+            Some(Token::Schedule) => self.parse_schedule(),
             Some(Token::Fn) => self.parse_function(),
             Some(Token::Let) => self.parse_variable_declaration(),
             _ => self.parse_expression_or_assignment(),
@@ -134,6 +136,18 @@ impl Parser {
         };
 
         Stmt::System(system)
+    }
+
+    fn parse_schedule(&mut self) -> Stmt {
+        self.expect(Token::Schedule);
+
+        self.expect(Token::CurlyBraceOpen);
+        let body = self.parse_block();
+        self.expect(Token::CurlyBraceClose);
+
+        let schedule = Schedule { body: body };
+
+        Stmt::Schedule(schedule)
     }
     // ---------------------------------------
 

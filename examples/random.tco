@@ -37,6 +37,6 @@ sys move_entities(position: mut Position, velocity: Velocity) using (time: Time)
 }
 
 schedule {
-    physics_update,
+    physics_update
     health_system
 }

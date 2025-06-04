@@ -44,6 +44,6 @@ sys producer_consumer {
 }
 
 schedule {
-    physics_update,
+    physics_update
     health_system
 }

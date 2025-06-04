@@ -154,18 +154,16 @@ fn test_parse_resource_declaration_with_named_fields() {
 #[test]
 fn test_parse_components_dot_operator() {
     let statements = parse(
-        "comp Position(x: Int, y: Int)
-
-sys example(position: Position) {
+        "sys example(position: Position) {
     print(position.x)
     print(position.y)
 }",
     );
 
-    assert_eq!(statements.len(), 2);
+    assert_eq!(statements.len(), 1);
 
-    let Stmt::System(system) = &statements[1] else {
-        panic!("Should have been a Stmt::System: {:?}", statements[1]);
+    let Stmt::System(system) = &statements[0] else {
+        panic!("Should have been a Stmt::System: {:?}", statements[0]);
     };
 
     assert_eq!(system.name, "example");
@@ -209,18 +207,16 @@ sys example(position: Position) {
 #[test]
 fn test_parse_system_with_implicit_loop() {
     let statements = parse(
-        "comp Position(x: Int, y: Int)
-comp Velocity(dx: Int, dy: Int)
-sys move_entities(position: mut Position, velocity: Velocity) {
+        "sys move_entities(position: mut Position, velocity: Velocity) {
     position.x += velocity.dx
     position.y += velocity.dy
 }",
     );
 
-    assert_eq!(statements.len(), 3);
+    assert_eq!(statements.len(), 1);
 
-    let Stmt::System(system) = &statements[2] else {
-        panic!("Should have been a Stmt::System : {:?}", statements[2]);
+    let Stmt::System(system) = &statements[0] else {
+        panic!("Should have been a Stmt::System : {:?}", statements[0]);
     };
 
     assert_eq!(system.name, "move_entities");
@@ -244,16 +240,13 @@ sys move_entities(position: mut Position, velocity: Velocity) {
 
 #[test]
 fn test_parse_system_using_resource() {
-    let statements = parse(
-        "comp Position(x: Int, y: Int)
-sys move_entities(position: Position) using (time: mut Time, date: Date) {
-}",
-    );
+    let statements =
+        parse("sys move_entities(position: Position) using (time: mut Time, date: Date) {}");
 
-    assert_eq!(statements.len(), 2);
+    assert_eq!(statements.len(), 1);
 
-    let Stmt::System(system) = &statements[1] else {
-        panic!("Should have been a Stmt::System : {:?}", statements[1]);
+    let Stmt::System(system) = &statements[0] else {
+        panic!("Should have been a Stmt::System : {:?}", statements[0]);
     };
 
     assert_eq!(
@@ -270,5 +263,29 @@ sys move_entities(position: Position) using (time: mut Time, date: Date) {
                 param_type: Type::Resource("Date".into())
             }
         ]
+    );
+}
+
+#[test]
+fn test_parse_schedule() {
+    let statements = parse(
+        "schedule {
+    physics_update
+    health_system
+}",
+    );
+
+    assert_eq!(statements.len(), 1);
+
+    let Stmt::Schedule(schedule) = &statements[0] else {
+        panic!("Should have been a Stmt::Schedule: {:?}", statements[0]);
+    };
+
+    assert_eq!(
+        schedule.body,
+        vec![
+            Stmt::Expr(Expr::Identifier("physics_update".into())),
+            Stmt::Expr(Expr::Identifier("health_system".into())),
+        ],
     );
 }
