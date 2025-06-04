@@ -30,6 +30,8 @@ pub enum Token {
     Sequential,
     #[token("par")]
     Parallel,
+    #[token("using")]
+    Using,
 
     #[token("fn")]
     Fn,

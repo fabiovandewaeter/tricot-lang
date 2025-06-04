@@ -95,6 +95,7 @@ pub enum Field {
 pub struct System {
     pub name: String,
     pub params: Vec<Param>,
+    pub resources: Vec<Param>,
     pub body: Vec<Stmt>,
 }
 

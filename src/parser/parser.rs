@@ -113,7 +113,14 @@ impl Parser {
         self.expect(Token::System);
         let name = self.expect_identifier("system name");
 
+        // components
         let params = self.parse_parameters(ParamContext::Component);
+
+        // resources
+        let mut resources = Vec::new();
+        if self.consume_if(Token::Using) {
+            resources = self.parse_parameters(ParamContext::Resource);
+        }
 
         self.expect(Token::CurlyBraceOpen);
         let body = self.parse_block();
@@ -122,6 +129,7 @@ impl Parser {
         let system = System {
             name: name.clone(),
             params,
+            resources,
             body: body,
         };
 

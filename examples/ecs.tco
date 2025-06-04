@@ -5,7 +5,7 @@ comp Health(Int)
 res Time(Int)
 
 // implicit loop, parameters are outside (and just one query)
-sys move_entities(position: mut Position, velocity: Velocity) {
+sys move_entities(position: mut Position, velocity: Velocity) using (time:Time) {
     position.x += velocity.dx
     position.y += velocity.dy
 }

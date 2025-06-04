@@ -105,12 +105,11 @@ fn test_parse_component_declaration_with_named_fields() {
     assert_eq!(component.name, "Position");
 
     assert_eq!(
-        component.fields[0],
-        Field::Named("x".to_string(), Type::Int)
-    );
-    assert_eq!(
-        component.fields[1],
-        Field::Named("y".to_string(), Type::Int)
+        component.fields,
+        vec![
+            Field::Named("x".to_string(), Type::Int),
+            Field::Named("y".to_string(), Type::Int)
+        ]
     );
 }
 
@@ -153,43 +152,6 @@ fn test_parse_resource_declaration_with_named_fields() {
 }
 
 #[test]
-fn test_parse_system_with_implicit_loop() {
-    let statements = parse(
-        "comp Position(x: Int, y: Int)
-comp Velocity(dx: Int, dy: Int)
-sys move_entities(position: mut Position, velocity: Velocity) {
-    position.x += velocity.dx
-    position.y += velocity.dy
-}",
-    );
-
-    assert_eq!(statements.len(), 3);
-
-    let Stmt::System(system) = &statements[2] else {
-        panic!("Should have been a Stmt::System : {:?}", statements[0]);
-    };
-
-    assert_eq!(system.name, "move_entities");
-
-    assert_eq!(
-        system.params[0],
-        Param {
-            name: "position".to_string(),
-            mutable: true,
-            param_type: Type::Component("Position".into())
-        }
-    );
-    assert_eq!(
-        system.params[1],
-        Param {
-            name: "velocity".to_string(),
-            mutable: false,
-            param_type: Type::Component("Velocity".into())
-        }
-    );
-}
-
-#[test]
 fn test_parse_components_dot_operator() {
     let statements = parse(
         "comp Position(x: Int, y: Int)
@@ -218,30 +180,95 @@ sys example(position: Position) {
     );
 
     assert_eq!(
-        system.body[0],
-        Stmt::Expr(Expr::Call {
-            callee: Box::new(Expr::Identifier("print".into())),
-            args: vec![
-                (Expr::BinaryOp {
-                    left: Box::new(Expr::Identifier("position".into())),
-                    op: BinaryOp::Dot,
-                    right: Box::new(Expr::Identifier("x".into()))
-                })
-            ],
-        })
+        system.body,
+        vec![
+            Stmt::Expr(Expr::Call {
+                callee: Box::new(Expr::Identifier("print".into())),
+                args: vec![
+                    (Expr::BinaryOp {
+                        left: Box::new(Expr::Identifier("position".into())),
+                        op: BinaryOp::Dot,
+                        right: Box::new(Expr::Identifier("x".into()))
+                    })
+                ],
+            }),
+            Stmt::Expr(Expr::Call {
+                callee: Box::new(Expr::Identifier("print".into())),
+                args: vec![
+                    (Expr::BinaryOp {
+                        left: Box::new(Expr::Identifier("position".into())),
+                        op: BinaryOp::Dot,
+                        right: Box::new(Expr::Identifier("y".into()))
+                    })
+                ],
+            })
+        ]
+    );
+}
+
+#[test]
+fn test_parse_system_with_implicit_loop() {
+    let statements = parse(
+        "comp Position(x: Int, y: Int)
+comp Velocity(dx: Int, dy: Int)
+sys move_entities(position: mut Position, velocity: Velocity) {
+    position.x += velocity.dx
+    position.y += velocity.dy
+}",
     );
 
+    assert_eq!(statements.len(), 3);
+
+    let Stmt::System(system) = &statements[2] else {
+        panic!("Should have been a Stmt::System : {:?}", statements[2]);
+    };
+
+    assert_eq!(system.name, "move_entities");
+
     assert_eq!(
-        system.body[1],
-        Stmt::Expr(Expr::Call {
-            callee: Box::new(Expr::Identifier("print".into())),
-            args: vec![
-                (Expr::BinaryOp {
-                    left: Box::new(Expr::Identifier("position".into())),
-                    op: BinaryOp::Dot,
-                    right: Box::new(Expr::Identifier("y".into()))
-                })
-            ],
-        })
+        system.params,
+        vec![
+            Param {
+                name: "position".to_string(),
+                mutable: true,
+                param_type: Type::Component("Position".into())
+            },
+            Param {
+                name: "velocity".to_string(),
+                mutable: false,
+                param_type: Type::Component("Velocity".into())
+            }
+        ]
+    );
+}
+
+#[test]
+fn test_parse_system_using_resource() {
+    let statements = parse(
+        "comp Position(x: Int, y: Int)
+sys move_entities(position: Position) using (time: mut Time, date: Date) {
+}",
+    );
+
+    assert_eq!(statements.len(), 2);
+
+    let Stmt::System(system) = &statements[1] else {
+        panic!("Should have been a Stmt::System : {:?}", statements[1]);
+    };
+
+    assert_eq!(
+        system.resources,
+        vec![
+            Param {
+                name: "time".to_string(),
+                mutable: true,
+                param_type: Type::Resource("Time".into())
+            },
+            Param {
+                name: "date".to_string(),
+                mutable: false,
+                param_type: Type::Resource("Date".into())
+            }
+        ]
     );
 }
