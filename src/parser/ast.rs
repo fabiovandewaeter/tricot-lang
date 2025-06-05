@@ -1,4 +1,4 @@
-use crate::{lexer::Token, types::types::Type};
+use crate::{lexer::Token, types::types::Type, values::Value};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -80,16 +80,42 @@ pub struct Component {
     pub fields: Vec<Field>,
 }
 
+impl Component {
+    /// Cherche dans `self.fields` un champ nommé `field_name`.
+    /// Si trouvé, renvoie `Some(&Type)`, sinon `None`.
+    pub fn get_field_type(&self, field_name: &str) -> Option<&Type> {
+        self.fields.iter().find_map(|field| match field {
+            Field::Named(name, ty) if name == field_name => Some(ty),
+            _ => None,
+        })
+    }
+
+    /// Si, au lieu du Type, vous voulez récupérer tout le Field (par exemple pour distinguer Named/Unnamed)
+    pub fn get_field(&self, field_name: &str) -> Option<&Field> {
+        self.fields
+            .iter()
+            .find(|field| matches!(field, Field::Named(name, _) if name == field_name))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resource {
     pub name: String,
     pub fields: Vec<Field>,
 }
 
+/// in Component
 #[derive(Debug, Clone, PartialEq)]
 pub enum Field {
     Named(String, Type),
     Unnamed(Type),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Param {
+    pub name: String,
+    pub mutable: bool,
+    pub param_type: Type,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -103,13 +129,6 @@ pub struct System {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Schedule {
     pub body: Vec<Stmt>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Param {
-    pub name: String,
-    pub mutable: bool,
-    pub param_type: Type,
 }
 
 #[derive(Debug, Clone, PartialEq)]

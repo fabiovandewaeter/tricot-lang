@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::types::types::Type;
 
 #[derive(Debug, Clone)]
@@ -15,6 +17,10 @@ pub enum Value {
         name: String,
         mutable: bool,
         depth_at_creation: usize,
+    },
+    ComponentInstance {
+        name: String,
+        fields: HashMap<String, Value>,
     },
 }
 

@@ -1,8 +1,14 @@
 use super::types::Type;
-use crate::parser::ast::{BinaryOp, Expr, Function, Param, Program, Stmt, UnaryOp};
+use crate::parser::ast::{
+    BinaryOp, Component, Expr, Function, Param, Program, Resource, Stmt, System, UnaryOp,
+};
 use std::collections::HashMap;
 
+#[derive(Debug)]
 struct TypeContext {
+    components: HashMap<String, Component>,
+    resources: HashMap<String, Resource>,
+    systems: HashMap<String, System>,
     functions: HashMap<String, Function>,
     variables: HashMap<String, (Type, bool)>,
 }
@@ -10,6 +16,9 @@ struct TypeContext {
 impl TypeContext {
     fn new() -> Self {
         Self {
+            components: HashMap::new(),
+            resources: HashMap::new(),
+            systems: HashMap::new(),
             functions: HashMap::new(),
             variables: HashMap::new(),
         }
@@ -47,17 +56,43 @@ impl TypeContext {
     }
 
     fn infer_binary_type(&self, left: &Expr, op: &BinaryOp, right: &Expr) -> Type {
-        let l_type = self.infer_type(left);
-        let r_type = self.infer_type(right);
+        match op {
+            BinaryOp::Dot => {
+                if let Expr::Identifier(left_name) = left {
+                    if let Expr::Identifier(right_name) = right {
+                        if let Some((Type::Component(comp_name), _)) = self.variables.get(left_name)
+                        {
+                            if let Some(component) = self.components.get(comp_name) {
+                                component.get_field_type(right_name).unwrap().clone()
+                            } else {
+                                println!("{:?}", self.components);
+                                panic!("Can't find Component: {:?}", comp_name)
+                            }
+                        } else {
+                            panic!("Can't find variable: {:?}", left_name)
+                        }
+                    } else {
+                        panic!("Cannot use dot product on that type")
+                    }
+                } else {
+                    panic!("Cannot use dot product on that type")
+                }
+            }
 
-        if l_type != r_type {
-            panic!(
-                "Type mismatch in binary operation: {:?} {:?} {:?}",
-                l_type, op, r_type
-            );
+            _ => {
+                let l_type = self.infer_type(left);
+                let r_type = self.infer_type(right);
+
+                if l_type != r_type {
+                    panic!(
+                        "Type mismatch in binary operation: {:?} {:?} {:?}",
+                        l_type, op, r_type
+                    );
+                }
+
+                l_type
+            }
         }
-
-        l_type
     }
 
     fn infer_call_type(&self, callee: &Expr, args: &[Expr]) -> Type {
@@ -105,6 +140,20 @@ impl TypeContext {
                 }
             }
 
+            Expr::BinaryOp { left, op, right: _ } => match op {
+                BinaryOp::Dot => {
+                    if let Expr::Identifier(name) = &**left {
+                        self.variables
+                            .get(name)
+                            .map(|(_, mutable)| *mutable)
+                            .unwrap_or(false)
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            },
+
             _ => false,
         }
     }
@@ -129,6 +178,32 @@ impl TypeContext {
                 }
             }
 
+            Expr::BinaryOp { left, op, right } => match op {
+                BinaryOp::Dot => {
+                    if let Expr::Identifier(left_name) = &**left {
+                        if let Expr::Identifier(right_name) = &**right {
+                            if let Some((Type::Component(comp_name), _)) =
+                                self.variables.get(left_name)
+                            {
+                                if let Some(component) = self.components.get(comp_name) {
+                                    component.get_field_type(right_name).unwrap().clone()
+                                } else {
+                                    println!("{:?}", self.components);
+                                    panic!("Can't find Component: {:?}", comp_name)
+                                }
+                            } else {
+                                panic!("Can't find variable: {:?}", left_name)
+                            }
+                        } else {
+                            panic!("Cannot use dot product on that type")
+                        }
+                    } else {
+                        panic!("Cannot use dot product on that type")
+                    }
+                }
+                _ => panic!("Can't resolve type of lvalue for that BinaryOp"),
+            },
+
             _ => panic!("Invalid l-value expression: {:?}", expr),
         }
     }
@@ -144,48 +219,104 @@ impl TypeChecker {
     pub fn check(&mut self, prog: &mut Program) {
         let mut global_context = TypeContext::new();
 
-        // Enregistrer les fonctions
-        for stmt in &prog.statements {
-            if let Stmt::Function(func) = stmt {
-                global_context
-                    .functions
-                    .insert(func.name.clone(), func.clone());
-            }
-        }
-
-        // Vérifier les déclarations
+        // add declarations and check Stmt
         for stmt in &prog.statements {
             match stmt {
-                Stmt::Function(func) => self.check_function(&global_context, func),
+                Stmt::Component(component) => {
+                    global_context
+                        .components
+                        .insert(component.name.clone(), component.clone());
+                }
+                Stmt::Resource(resource) => {
+                    global_context
+                        .resources
+                        .insert(resource.name.clone(), resource.clone());
+                }
+                Stmt::System(system) => {
+                    global_context
+                        .systems
+                        .insert(system.name.clone(), system.clone());
+
+                    self.check_system(&global_context, system)
+                }
+                Stmt::Function(func) => {
+                    global_context
+                        .functions
+                        .insert(func.name.clone(), func.clone());
+
+                    self.check_function(&global_context, func)
+                }
                 _ => self.check_stmt(&mut global_context, stmt),
             }
         }
     }
 
-    fn check_function(&self, global_context: &TypeContext, function: &Function) {
+    fn check_system(&self, global_context: &TypeContext, system: &System) {
         let mut local_context = TypeContext {
+            components: global_context.components.clone(),
+            resources: global_context.resources.clone(),
+            systems: global_context.systems.clone(),
             functions: global_context.functions.clone(),
             variables: HashMap::new(),
         };
 
-        // Ajouter les paramètres
+        // add parameters to context
         for Param {
             name,
             param_type,
-            mutable: _,
+            mutable,
+        } in &system.params
+        {
+            local_context
+                .variables
+                .insert(name.clone(), (param_type.clone(), mutable.clone()));
+        }
+
+        // add resources
+        for Param {
+            name,
+            param_type,
+            mutable,
+        } in &system.resources
+        {
+            local_context
+                .variables
+                .insert(name.clone(), (param_type.clone(), mutable.clone()));
+        }
+
+        // checks body
+        for stmt in &system.body {
+            self.check_stmt(&mut local_context, stmt);
+        }
+    }
+
+    fn check_function(&self, global_context: &TypeContext, function: &Function) {
+        let mut local_context = TypeContext {
+            components: global_context.components.clone(),
+            resources: global_context.resources.clone(),
+            systems: global_context.systems.clone(),
+            functions: global_context.functions.clone(),
+            variables: HashMap::new(),
+        };
+
+        // adds parameters to context
+        for Param {
+            name,
+            param_type,
+            mutable,
         } in &function.params
         {
             local_context
                 .variables
-                .insert(name.clone(), (param_type.clone(), false));
+                .insert(name.clone(), (param_type.clone(), mutable.clone()));
         }
 
-        // Vérifier le corps
+        // checks body
         for stmt in &function.body {
             self.check_stmt(&mut local_context, stmt);
         }
 
-        // Vérifier le type de retour
+        // checks return type
         let last_expr = function.body.last();
         if function.return_type != Type::Null {
             if let Some(Stmt::Expr(expr)) = last_expr {
