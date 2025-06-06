@@ -660,7 +660,7 @@ impl Interpreter {
         result
     }
 
-    // for tests
+    // ------------ for tests ------------
     pub fn save_for_variable_tests(&mut self, variable_name: String, value: Value) {
         self.saved_variables_for_tests.insert(variable_name, value);
     }

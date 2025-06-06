@@ -16,7 +16,7 @@ fn parse(input: &str) -> Vec<Stmt> {
 
 #[test]
 fn test_parse_variable_declaration() {
-    let statements = parse("let mut x = 42");
+    let statements = parse("let mut x: Int = 42");
 
     assert_eq!(statements.len(), 1);
 
@@ -32,7 +32,7 @@ fn test_parse_variable_declaration() {
 
     assert!(mutable);
     assert_eq!(name, "x");
-    assert_eq!(*expected_type, Type::UNDEFINED);
+    assert_eq!(*expected_type, Type::Int);
 
     let Expr::Number(value) = *expression else {
         panic!("Should have been a Expr::Number : {:?}", expression);

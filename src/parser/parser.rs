@@ -248,6 +248,11 @@ impl Parser {
         let mutable = self.consume_if(Token::Mut);
         let name = self.expect_identifier("variable name");
 
+        let expected_type = if self.consume_if(Token::Colon) {
+            self.parse_type()
+        } else {
+            Type::UNDEFINED
+        };
         self.expect(Token::Assign);
         let expr = self.parse_expression(0);
 
@@ -255,7 +260,8 @@ impl Parser {
             mutable,
             name,
             expression: expr,
-            expected_type: Type::UNDEFINED,
+            //expected_type: Type::UNDEFINED,
+            expected_type,
         }
     }
 
