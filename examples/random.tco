@@ -52,20 +52,18 @@ schedule {
 
 //===============================
 comp Position(x: Int, y: Int)
+comp Velocity(dx: Int, dy: Int)
 
-sys move_entities(position: mut Position) {
-    position.x += 1
-
-    save_variable_for_tests("tempo_x", position.x)
-    save_variable_for_tests("tempo_y", position.y)
+sys move_entities(position: mut Position, velocity: Velocity) {
+    position.x += velocity.dx
 
     print(position.x)
 }
 
-// entity spawning
 sys entity_spawner() {
     let id = spawn {
-        Position(0, 0)
+        Position(0, 0),
+        Velocity(1, 1)
     }
 }
 

@@ -63,7 +63,7 @@ comp Health(Int)
 
 res Time(Int)
 
-sys move_entities(position: mut Position, velocity: Velocity) using (time: Time) {
+sys move_entities(position: mut Position, velocity: Velocity) {
     position.x += velocity.dx
     position.y += velocity.dy
 
@@ -71,17 +71,25 @@ sys move_entities(position: mut Position, velocity: Velocity) using (time: Time)
     save_variable_for_tests(\"tempo_y\", position.y)
 }
 
+sys entity_spawner() {
+    let id = spawn {
+        Position(0, 0),
+        Velocity(1, 1)
+    }
+}
+
 schedule {
+    entity_spawner,
     move_entities
 }
 ");
 
     assert_eq!(
         interpreter.get_saved_for_tests("tempo_x".into()),
-        Value::Int(2)
+        Value::Int(1)
     );
     assert_eq!(
         interpreter.get_saved_for_tests("tempo_y".into()),
-        Value::Int(2)
+        Value::Int(1)
     );
 }

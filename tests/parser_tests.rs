@@ -270,7 +270,7 @@ fn test_parse_system_using_resource() {
 fn test_parse_schedule() {
     let statements = parse(
         "schedule {
-    physics_update
+    physics_update,
     health_system
 }",
     );
