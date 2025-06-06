@@ -6,6 +6,8 @@ let d = 1
     <- yourself
 */
 
+//===============================
+
 // pipeline
 /*
 let player =
@@ -14,6 +16,8 @@ let player =
   |> add(Health(100, 100))
   |> yourself
 */
+
+//===============================
 
 /*
 fn incr(a: &mut Int) {
@@ -24,40 +28,17 @@ incr(&mut a)
 print(a)
 */
 
-/*comp Position(x: Int, y: Int)
-comp Velocity(dx: Int, dy: Int)
-comp Health(Int)
-
-res Time(Int)
-
-// implicit loop, parameters are outside (and just one query)
-sys move_entities(position: mut Position, velocity: Velocity) using (time: Time) {
-    position.x += velocity.dx
-    position.y += velocity.dy
-}
-
-// entity spawning
-sys entity_spawner {
-    let id = spawn {
-        Position(0, 0),
-        Velocity(1, 1)
-    }
-}
-
-schedule {
-    entity_spawner,
-    physics_update,
-    health_system
-}*/
-
 //===============================
+
 comp Position(x: Int, y: Int)
 comp Velocity(dx: Int, dy: Int)
 
 sys move_entities(position: mut Position, velocity: Velocity) {
     position.x += velocity.dx
+    position.y += velocity.dy
 
     print(position.x)
+    print(position.y)
 }
 
 sys entity_spawner() {
