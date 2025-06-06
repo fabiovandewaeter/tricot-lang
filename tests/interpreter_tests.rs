@@ -11,7 +11,7 @@ fn run(input: &str) -> Interpreter {
     let mut type_checker = TypeChecker::new();
     type_checker.check(&mut program);
     let mut interpreter = Interpreter::new();
-    interpreter.run(program);
+    interpreter.run(program, false);
     interpreter
 }
 

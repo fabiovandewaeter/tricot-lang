@@ -9,6 +9,7 @@ pub struct Interpreter {
     stack: Vec<HashMap<String, Value>>,
     components: HashMap<String, Component>,
     systems: HashMap<String, System>,
+    schedule: Option<Schedule>,
     functions: HashMap<String, Function>,
     ecs_registry: EcsRegistry,
     saved_variables_for_tests: HashMap<String, Value>,
@@ -21,13 +22,14 @@ impl Interpreter {
             stack: vec![HashMap::new()],
             components: HashMap::new(),
             systems: HashMap::new(),
+            schedule: None,
             functions: HashMap::new(),
             ecs_registry: EcsRegistry::new(),
             saved_variables_for_tests: HashMap::new(),
         }
     }
 
-    pub fn run(&mut self, prog: Program) {
+    pub fn run(&mut self, prog: Program, infinite_loop: bool) {
         // Register functions first
         for stmt in &prog.statements {
             match stmt {
@@ -37,6 +39,10 @@ impl Interpreter {
 
                 Stmt::System(system) => {
                     self.systems.insert(system.name.clone(), system.clone());
+                }
+
+                Stmt::Schedule(schedule) => {
+                    self.schedule = Some(schedule.clone());
                 }
 
                 Stmt::Function(func) => {
@@ -50,15 +56,23 @@ impl Interpreter {
         // Execute statements
         for stmt in prog.statements {
             match stmt {
-                Stmt::Function(_) | Stmt::Component(_) | Stmt::System(_) => {}
+                Stmt::Function(_) | Stmt::Component(_) | Stmt::System(_) | Stmt::Schedule(_) => {}
 
-                Stmt::Schedule(schedule) => {
-                    self.run_schedule(&schedule);
-                }
+                Stmt::Schedule(schedule) => self.run_schedule(&schedule),
 
                 _ => {
                     self.run_stmt(stmt);
                 }
+            }
+        }
+
+        if let Some(schedule) = self.schedule.clone() {
+            if infinite_loop {
+                while true {
+                    self.run_schedule(&schedule);
+                }
+            } else {
+                self.run_schedule(&schedule);
             }
         }
     }

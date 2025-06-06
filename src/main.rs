@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // use the interpreter
     let mut interpreter = Interpreter::new();
-    interpreter.run(program);
+    interpreter.run(program, true);
 
     Ok(())
 }
