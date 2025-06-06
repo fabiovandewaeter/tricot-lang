@@ -32,6 +32,8 @@ pub enum Token {
     Parallel,
     #[token("using")]
     Using,
+    #[token("spawn")]
+    Spawn,
 
     #[token("fn")]
     Fn,

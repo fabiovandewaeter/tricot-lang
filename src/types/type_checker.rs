@@ -1,6 +1,7 @@
 use super::types::Type;
 use crate::parser::ast::{
-    BinaryOp, Component, Expr, Function, Param, Program, Resource, Stmt, System, UnaryOp,
+    BinaryOp, Component, Expr, Field, Function, Param, Program, Resource, Schedule, Stmt, System,
+    UnaryOp,
 };
 use std::collections::HashMap;
 
@@ -9,6 +10,7 @@ struct TypeContext {
     components: HashMap<String, Component>,
     resources: HashMap<String, Resource>,
     systems: HashMap<String, System>,
+    schedule: Option<Schedule>,
     functions: HashMap<String, Function>,
     variables: HashMap<String, (Type, bool)>,
 }
@@ -19,6 +21,7 @@ impl TypeContext {
             components: HashMap::new(),
             resources: HashMap::new(),
             systems: HashMap::new(),
+            schedule: None,
             functions: HashMap::new(),
             variables: HashMap::new(),
         }
@@ -27,6 +30,7 @@ impl TypeContext {
     fn infer_type(&self, expression: &Expr) -> Type {
         match expression {
             Expr::Number(_) => Type::Int,
+
             Expr::StringLiteral(_) => Type::String,
 
             Expr::Identifier(name) => self
@@ -36,8 +40,12 @@ impl TypeContext {
                 .unwrap_or_else(|| panic!("Undefined variable: {}", name)),
 
             Expr::UnaryOp { op, expr } => self.infer_unary_type(op, expr),
+
             Expr::BinaryOp { left, op, right } => self.infer_binary_type(left, op, right),
+
             Expr::Call { callee, args } => self.infer_call_type(callee, args),
+
+            Expr::Spawn(component_inits) => self.check_entity_spawn(component_inits),
         }
     }
 
@@ -118,6 +126,71 @@ impl TypeContext {
         }
 
         function.return_type.clone()
+    }
+
+    fn check_entity_spawn(&self, component_inits: &Vec<Expr>) -> Type {
+        // On s’assure que chaque élément est bien un appel de constructeur de composant
+        for init_expr in component_inits {
+            match init_expr {
+                Expr::Call { callee, args } => {
+                    // Le nom du composant doit exister dans self.components
+                    let comp_name = match &**callee {
+                        Expr::Identifier(id) => id,
+                        other => panic!(
+                            "Spawn attends un appel de constructeur (nom du composant). Mais trouvé : {:?}",
+                            other
+                        ),
+                    };
+
+                    // Vérifier que ce composant a bien été déclaré
+                    let component = self.components.get(comp_name).unwrap_or_else(|| {
+                        panic!("Composant inconnu dans spawn: {}", comp_name);
+                    });
+
+                    // Vérifier que le nombre et les types d’arguments correspondent aux champs du composant
+                    if args.len() != component.fields.len() {
+                        panic!(
+                            "Le composant '{}' attend {} champ(s), mais le spawn en fournit {}",
+                            comp_name,
+                            component.fields.len(),
+                            args.len()
+                        );
+                    }
+                    // On peut parcourir component.fields et args en parallèle pour vérifier les types
+                    for (i, (field, arg_expr)) in
+                        component.fields.iter().zip(args.iter()).enumerate()
+                    {
+                        // Supposons que `field` soit toujours un `Field::Named(_, field_type)`
+                        let expected_ty = match field {
+                            Field::Named(_, ty) => ty.clone(),
+                            Field::Unnamed(_) => {
+                                panic!(
+                                    "Dans votre implémentation, on n’utilise pas de champs anonymes"
+                                )
+                            }
+                        };
+                        let actual_ty = self.infer_type(arg_expr);
+                        if actual_ty != expected_ty {
+                            panic!(
+                                "Type mismatch pour le champ #{} du composant '{}' : \
+                                        attendu {:?}, trouvé {:?}",
+                                i, comp_name, expected_ty, actual_ty
+                            );
+                        }
+                    }
+                }
+
+                other => {
+                    panic!(
+                        "Dans spawn, chaque élément doit être un appel de constructeur de composant, \
+                                trouvé : {:?}",
+                        other
+                    );
+                }
+            }
+        }
+        // Si tout est OK, on considère que le spawn renvoie un ID d’entité (Int)
+        Type::Int
     }
 
     fn is_expr_mutable(&self, expr: &Expr) -> bool {
@@ -227,11 +300,13 @@ impl TypeChecker {
                         .components
                         .insert(component.name.clone(), component.clone());
                 }
+
                 Stmt::Resource(resource) => {
                     global_context
                         .resources
                         .insert(resource.name.clone(), resource.clone());
                 }
+
                 Stmt::System(system) => {
                     global_context
                         .systems
@@ -239,6 +314,13 @@ impl TypeChecker {
 
                     self.check_system(&global_context, system)
                 }
+
+                Stmt::Schedule(schedule) => {
+                    global_context.schedule = Some(schedule.clone());
+
+                    self.check_schedule(&global_context, schedule)
+                }
+
                 Stmt::Function(func) => {
                     global_context
                         .functions
@@ -246,6 +328,7 @@ impl TypeChecker {
 
                     self.check_function(&global_context, func)
                 }
+
                 _ => self.check_stmt(&mut global_context, stmt),
             }
         }
@@ -256,6 +339,7 @@ impl TypeChecker {
             components: global_context.components.clone(),
             resources: global_context.resources.clone(),
             systems: global_context.systems.clone(),
+            schedule: global_context.schedule.clone(),
             functions: global_context.functions.clone(),
             variables: HashMap::new(),
         };
@@ -290,11 +374,43 @@ impl TypeChecker {
         }
     }
 
+    fn check_schedule(&self, global_context: &TypeContext, schedule: &Schedule) {
+        let local_context = TypeContext {
+            components: global_context.components.clone(),
+            resources: global_context.resources.clone(),
+            systems: global_context.systems.clone(),
+            schedule: global_context.schedule.clone(),
+            functions: global_context.functions.clone(),
+            variables: HashMap::new(),
+        };
+
+        // checks body
+        for stmt in &schedule.body {
+            match stmt {
+                Stmt::Expr(expr) => match expr {
+                    Expr::Identifier(callee_name) => {
+                        local_context.systems.get(callee_name).unwrap_or_else(|| {
+                            panic!("Calls a system that does not exist: {:?}", callee_name);
+                        });
+                    }
+
+                    other => panic!(
+                        "Identifier in a Schedule should has the name of a System: {:?}",
+                        other
+                    ),
+                },
+
+                _ => panic!("Unsupported statement in Schedule: {:?}", stmt),
+            }
+        }
+    }
+
     fn check_function(&self, global_context: &TypeContext, function: &Function) {
         let mut local_context = TypeContext {
             components: global_context.components.clone(),
             resources: global_context.resources.clone(),
             systems: global_context.systems.clone(),
+            schedule: global_context.schedule.clone(),
             functions: global_context.functions.clone(),
             variables: HashMap::new(),
         };
@@ -353,6 +469,9 @@ impl TypeChecker {
             } => self.check_compound_assignment(context, target, op, expression),
 
             Stmt::Expr(expr) => self.check_expr(context, expr),
+
+            Stmt::System(_) => (), // Déjà géré
+
             Stmt::Function(_) => (), // Déjà géré
 
             _ => panic!("Unsupported statement: {:?}", stmt),

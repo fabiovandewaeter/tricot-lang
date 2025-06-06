@@ -24,7 +24,7 @@ incr(&mut a)
 print(a)
 */
 
-comp Position(x: Int, y: Int)
+/*comp Position(x: Int, y: Int)
 comp Velocity(dx: Int, dy: Int)
 comp Health(Int)
 
@@ -36,7 +36,40 @@ sys move_entities(position: mut Position, velocity: Velocity) using (time: Time)
     position.y += velocity.dy
 }
 
+// entity spawning
+sys entity_spawner {
+    let id = spawn {
+        Position(0, 0),
+        Velocity(1, 1)
+    }
+}
+
 schedule {
-    physics_update
+    entity_spawner,
+    physics_update,
     health_system
+}*/
+
+//===============================
+comp Position(x: Int, y: Int)
+
+sys move_entities(position: mut Position) {
+    position.x += 1
+
+    save_variable_for_tests("tempo_x", position.x)
+    save_variable_for_tests("tempo_y", position.y)
+
+    print(position.x)
+}
+
+// entity spawning
+sys entity_spawner() {
+    let id = spawn {
+        Position(0, 0)
+    }
+}
+
+schedule {
+    entity_spawner,
+    move_entities
 }

@@ -1,4 +1,4 @@
-use crate::{lexer::Token, types::types::Type, values::Value};
+use crate::{lexer::Token, types::types::Type};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -18,6 +18,7 @@ pub enum Expr {
         callee: Box<Expr>, // an Identifier
         args: Vec<Expr>,
     },
+    Spawn(Vec<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

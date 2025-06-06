@@ -1,6 +1,6 @@
 use logos::Logos;
 use tricot_lang::{
-    interpreter::Interpreter, lexer::Token, parser::parser::Parser,
+    interpreter::interpreter::Interpreter, lexer::Token, parser::parser::Parser,
     types::type_checker::TypeChecker, values::Value,
 };
 
@@ -51,4 +51,37 @@ let mut a = 1
 incr(&mut a)");
 
     assert_eq!(interpreter.get_variable("a"), Value::Int(2));
+}
+
+// ECS
+#[test]
+fn test_interpreter_system_with_implicit_loop() {
+    let interpreter = run("
+comp Position(x: Int, y: Int)
+comp Velocity(dx: Int, dy: Int)
+comp Health(Int)
+
+res Time(Int)
+
+sys move_entities(position: mut Position, velocity: Velocity) using (time: Time) {
+    position.x += velocity.dx
+    position.y += velocity.dy
+
+    save_variable_for_tests(\"tempo_x\", position.x)
+    save_variable_for_tests(\"tempo_y\", position.y)
+}
+
+schedule {
+    move_entities
+}
+");
+
+    assert_eq!(
+        interpreter.get_saved_for_tests("tempo_x".into()),
+        Value::Int(2)
+    );
+    assert_eq!(
+        interpreter.get_saved_for_tests("tempo_y".into()),
+        Value::Int(2)
+    );
 }

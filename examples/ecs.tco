@@ -43,7 +43,21 @@ sys producer_consumer {
     with (mut Consumer) => process_items()
 }
 
+// entity spawning
+sys entity_spawner() {
+    let id = spawn {
+        Position(0, 0),
+        Velocity(1, 1)
+    }
+}
+
+// on trigger
+sys print_something() on (PrintTrigger) {
+    print("print_something()")
+}
+
 schedule {
-    physics_update
+    entity_spawner,
+    physics_update,
     health_system
 }

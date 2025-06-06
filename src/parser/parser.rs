@@ -140,12 +140,42 @@ impl Parser {
         self.expect(Token::Schedule);
 
         self.expect(Token::CurlyBraceOpen);
-        let body = self.parse_block();
+        let mut systems = Vec::new();
+        loop {
+            match self.peek() {
+                Some(Token::Identifier(name)) => {
+                    // On consomme l’identifiant et on le stocke
+                    let sys_name = name.clone();
+                    self.next();
+                    systems.push(sys_name);
+                }
+                other => {
+                    panic!(
+                        "Dans le bloc `schedule`, on attendait un identifiant de système, trouvé {:?}",
+                        other
+                    );
+                }
+            }
+
+            // Si on trouve une virgule, on la consomme et on continue la boucle
+            if self.consume_if(Token::Comma) {
+                continue;
+            } else {
+                // Sinon, on sort de la boucle (fin de liste)
+                break;
+            }
+        }
         self.expect(Token::CurlyBraceClose);
 
-        let schedule = Schedule { body: body };
+        // create Scredule body
+        let mut body = Vec::new();
+        for name in systems {
+            // Ici, on crée un expr « entity_spawner » ou « move_entities »
+            let expr_ident = Expr::Identifier(name);
+            body.push(Stmt::Expr(expr_ident));
+        }
 
-        Stmt::Schedule(schedule)
+        Stmt::Schedule(Schedule { body: body })
     }
     // ---------------------------------------
 
@@ -308,7 +338,9 @@ impl Parser {
     fn parse_atom(&mut self) -> Expr {
         match self.next().unwrap() {
             Token::Number(n) => Expr::Number(n.parse().unwrap()),
+
             Token::Identifier(id) => Expr::Identifier(id),
+
             Token::StringLiteral(s) => Expr::StringLiteral(s),
 
             Token::Ampersand => {
@@ -332,6 +364,33 @@ impl Parser {
                 let expr = self.parse_expression(0);
                 self.expect(Token::ParenthesisClose);
                 expr
+            }
+
+            Token::Spawn => {
+                // On s’attend à trouver une accolade ouvrante
+                self.expect(Token::CurlyBraceOpen);
+
+                // On va collecter une liste d’expressions à l’intérieur de {...}
+                let mut comps = Vec::new();
+                while self.peek() != Some(&Token::CurlyBraceClose) {
+                    // On parse ici n’importe quelle expression (typiquement un constructeur de composant,
+                    // par exemple Position(0, 0) ) :
+                    let comp_expr = self.parse_expression(0);
+                    comps.push(comp_expr);
+
+                    // Si une virgule suit, on la consomme et on continue
+                    if self.consume_if(Token::Comma) {
+                        continue;
+                    } else {
+                        break;
+                    }
+                }
+
+                // On ferme l’accolade
+                self.expect(Token::CurlyBraceClose);
+
+                // On retourne une Expr::Spawn contenant la liste des composants
+                Expr::Spawn(comps)
             }
 
             token => panic!("Unexpected token: {:?}", token),
