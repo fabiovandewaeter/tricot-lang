@@ -116,6 +116,15 @@ pub struct Resource {
     pub fields: Vec<Field>,
 }
 
+impl Resource {
+    pub fn get_field_type(&self, field_name: &str) -> Option<&Type> {
+        self.fields.iter().find_map(|field| match field {
+            Field::Named(name, ty) if name == field_name => Some(ty),
+            _ => None,
+        })
+    }
+}
+
 /// in Component
 #[derive(Debug, Clone, PartialEq)]
 pub enum Field {

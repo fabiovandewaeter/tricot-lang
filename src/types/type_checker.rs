@@ -1,7 +1,7 @@
 use super::types::Type;
 use crate::parser::ast::{
-    BinaryOp, Component, Expr, Field, Function, Param, Program, Resource, Schedule, Stmt, System,
-    UnaryOp,
+    BinaryOp, Component, Expr, Field, Function, Param, Program, Resource, Schedule, Setup, Stmt,
+    System, UnaryOp,
 };
 use std::collections::HashMap;
 
@@ -11,6 +11,7 @@ struct TypeContext {
     resources: HashMap<String, Resource>,
     systems: HashMap<String, System>,
     schedule: Option<Schedule>,
+    setup: Option<Setup>,
     functions: HashMap<String, Function>,
     variables: HashMap<String, (Type, bool)>,
 }
@@ -22,6 +23,7 @@ impl TypeContext {
             resources: HashMap::new(),
             systems: HashMap::new(),
             schedule: None,
+            setup: None,
             functions: HashMap::new(),
             variables: HashMap::new(),
         }
@@ -63,28 +65,43 @@ impl TypeContext {
             BinaryOp::Dot => {
                 if let Expr::Identifier(left_name) = left {
                     if let Expr::Identifier(right_name) = right {
-                        if let Some((Type::Component(comp_name), _)) = self.variables.get(left_name)
-                        {
-                            if let Some(component) = self.components.get(comp_name) {
-                                component.get_field_type(right_name).unwrap().clone()
-                            } else {
-                                println!("{:?}", self.components);
-                                panic!("Can't find Component: {:?}", comp_name)
+                        if let Some((left_type, _)) = self.variables.get(left_name) {
+                            match left_type {
+                                Type::Component(comp_name) => {
+                                    if let Some(component) = self.components.get(comp_name) {
+                                        component.get_field_type(right_name).unwrap().clone()
+                                    } else {
+                                        panic!("Can't find Component: {:?}", comp_name)
+                                    }
+                                }
+                                Type::Resource(res_name) => {
+                                    if let Some(resource) = self.resources.get(res_name) {
+                                        resource.get_field_type(right_name).unwrap().clone()
+                                    } else {
+                                        panic!("Can't find Resource: {:?}", res_name)
+                                    }
+                                }
+                                _ => panic!("Cannot use dot operator on type {:?}", left_type),
                             }
                         } else {
                             panic!("Can't find variable: {:?}", left_name)
                         }
                     } else {
-                        panic!("Cannot use dot product on that type")
+                        panic!("Right side of dot must be an identifier")
                     }
                 } else {
-                    panic!("Cannot use dot product on that type")
+                    panic!("Left side of dot must be an identifier")
                 }
             }
 
             _ => {
                 let l_type = self.infer_type(left);
                 let r_type = self.infer_type(right);
+
+                // Special case for resource fields
+                if let (Type::Resource(_), Type::Int) = (&l_type, &r_type) {
+                    return l_type.clone();
+                }
 
                 if l_type != r_type {
                     panic!(
@@ -109,7 +126,6 @@ impl TypeContext {
             .get(function_name)
             .unwrap_or_else(|| panic!("Function '{}' not found", function_name));
 
-        // Vérifier les arguments
         for (i, (arg, param)) in args.iter().zip(function.params.iter()).enumerate() {
             let arg_type = self.infer_type(arg);
             if arg_type != param.param_type {
@@ -124,11 +140,9 @@ impl TypeContext {
     }
 
     fn check_entity_spawn(&self, component_inits: &Vec<Expr>) -> Type {
-        // On s’assure que chaque élément est bien un appel de constructeur de composant
         for init_expr in component_inits {
             match init_expr {
                 Expr::Call { callee, args } => {
-                    // Le nom du composant doit exister dans self.components
                     let comp_name = match &**callee {
                         Expr::Identifier(id) => id,
                         other => panic!(
@@ -137,12 +151,10 @@ impl TypeContext {
                         ),
                     };
 
-                    // Vérifier que ce composant a bien été déclaré
                     let component = self.components.get(comp_name).unwrap_or_else(|| {
                         panic!("Composant inconnu dans spawn: {}", comp_name);
                     });
 
-                    // Vérifier que le nombre et les types d’arguments correspondent aux champs du composant
                     if args.len() != component.fields.len() {
                         panic!(
                             "Le composant '{}' attend {} champ(s), mais le spawn en fournit {}",
@@ -151,18 +163,13 @@ impl TypeContext {
                             args.len()
                         );
                     }
-                    // On peut parcourir component.fields et args en parallèle pour vérifier les types
+
                     for (i, (field, arg_expr)) in
                         component.fields.iter().zip(args.iter()).enumerate()
                     {
-                        // Supposons que `field` soit toujours un `Field::Named(_, field_type)`
                         let expected_ty = match field {
                             Field::Named(_, ty) => ty.clone(),
-                            Field::Unnamed(_) => {
-                                panic!(
-                                    "Dans votre implémentation, on n’utilise pas de champs anonymes"
-                                )
-                            }
+                            Field::Unnamed(ty) => ty.clone(),
                         };
                         let actual_ty = self.infer_type(arg_expr);
                         if actual_ty != expected_ty {
@@ -184,7 +191,6 @@ impl TypeContext {
                 }
             }
         }
-        // Si tout est OK, on considère que le spawn renvoie un ID d’entité (Int)
         Type::Int
     }
 
@@ -250,23 +256,32 @@ impl TypeContext {
                 BinaryOp::Dot => {
                     if let Expr::Identifier(left_name) = &**left {
                         if let Expr::Identifier(right_name) = &**right {
-                            if let Some((Type::Component(comp_name), _)) =
-                                self.variables.get(left_name)
-                            {
-                                if let Some(component) = self.components.get(comp_name) {
-                                    component.get_field_type(right_name).unwrap().clone()
-                                } else {
-                                    println!("{:?}", self.components);
-                                    panic!("Can't find Component: {:?}", comp_name)
+                            if let Some((ty, _)) = self.variables.get(left_name) {
+                                match ty {
+                                    Type::Component(comp_name) => {
+                                        if let Some(component) = self.components.get(comp_name) {
+                                            component.get_field_type(right_name).unwrap().clone()
+                                        } else {
+                                            panic!("Can't find Component: {:?}", comp_name)
+                                        }
+                                    }
+                                    Type::Resource(res_name) => {
+                                        if let Some(resource) = self.resources.get(res_name) {
+                                            resource.get_field_type(right_name).unwrap().clone()
+                                        } else {
+                                            panic!("Can't find Resource: {:?}", res_name)
+                                        }
+                                    }
+                                    _ => panic!("Cannot use dot operator on type {:?}", ty),
                                 }
                             } else {
                                 panic!("Can't find variable: {:?}", left_name)
                             }
                         } else {
-                            panic!("Cannot use dot product on that type")
+                            panic!("Right side of dot must be an identifier")
                         }
                     } else {
-                        panic!("Cannot use dot product on that type")
+                        panic!("Left side of dot must be an identifier")
                     }
                 }
                 _ => panic!("Can't resolve type of lvalue for that BinaryOp"),
@@ -287,7 +302,6 @@ impl TypeChecker {
     pub fn check(&mut self, prog: &mut Program) {
         let mut global_context = TypeContext::new();
 
-        // add declarations and check Stmt
         for stmt in &prog.statements {
             match stmt {
                 Stmt::Component(component) => {
@@ -312,15 +326,18 @@ impl TypeChecker {
 
                 Stmt::Schedule(schedule) => {
                     global_context.schedule = Some(schedule.clone());
-
                     self.check_schedule(&global_context, schedule)
+                }
+
+                Stmt::Setup(setup) => {
+                    global_context.setup = Some(setup.clone());
+                    self.check_setup(&global_context, setup)
                 }
 
                 Stmt::Function(func) => {
                     global_context
                         .functions
                         .insert(func.name.clone(), func.clone());
-
                     self.check_function(&global_context, func)
                 }
 
@@ -335,11 +352,11 @@ impl TypeChecker {
             resources: global_context.resources.clone(),
             systems: global_context.systems.clone(),
             schedule: global_context.schedule.clone(),
+            setup: global_context.setup.clone(),
             functions: global_context.functions.clone(),
             variables: HashMap::new(),
         };
 
-        // add parameters to context
         for Param {
             name,
             param_type,
@@ -348,10 +365,9 @@ impl TypeChecker {
         {
             local_context
                 .variables
-                .insert(name.clone(), (param_type.clone(), mutable.clone()));
+                .insert(name.clone(), (param_type.clone(), *mutable));
         }
 
-        // add resources
         for Param {
             name,
             param_type,
@@ -360,10 +376,9 @@ impl TypeChecker {
         {
             local_context
                 .variables
-                .insert(name.clone(), (param_type.clone(), mutable.clone()));
+                .insert(name.clone(), (param_type.clone(), *mutable));
         }
 
-        // checks body
         for stmt in &system.body {
             self.check_stmt(&mut local_context, stmt);
         }
@@ -375,16 +390,15 @@ impl TypeChecker {
             resources: global_context.resources.clone(),
             systems: global_context.systems.clone(),
             schedule: global_context.schedule.clone(),
+            setup: global_context.setup.clone(),
             functions: global_context.functions.clone(),
             variables: HashMap::new(),
         };
 
-        // checks body
         for stmt in &schedule.body {
             match stmt {
                 Stmt::Expr(expr) => match expr {
                     Expr::CallSystem { callee, once: _ } => {
-                        // On s’assure que le callee est bien un Identifier
                         if let Expr::Identifier(callee_name) = &**callee {
                             local_context.systems.get(callee_name).unwrap_or_else(|| {
                                 panic!("Calls a system that does not exist: {:?}", callee_name);
@@ -408,17 +422,88 @@ impl TypeChecker {
         }
     }
 
+    fn check_setup(&self, global_context: &TypeContext, setup: &Setup) {
+        let mut local_context = TypeContext {
+            components: global_context.components.clone(),
+            resources: global_context.resources.clone(),
+            systems: global_context.systems.clone(),
+            schedule: global_context.schedule.clone(),
+            setup: global_context.setup.clone(),
+            functions: global_context.functions.clone(),
+            variables: HashMap::new(),
+        };
+
+        for stmt in &setup.body {
+            if let Stmt::Init { name, fields } = stmt {
+                let resource = global_context.resources.get(name).unwrap_or_else(|| {
+                    panic!("Unknown resource in setup: {}", name);
+                });
+
+                if fields.len() != resource.fields.len() {
+                    panic!(
+                        "Resource {} expects {} fields, found {}",
+                        name,
+                        resource.fields.len(),
+                        fields.len()
+                    );
+                }
+
+                for (i, ((field_name_opt, expr), resource_field)) in
+                    fields.iter().zip(resource.fields.iter()).enumerate()
+                {
+                    let expected_type = match resource_field {
+                        Field::Named(_, ty) => ty,
+                        Field::Unnamed(ty) => ty,
+                    };
+
+                    let actual_type = local_context.infer_type(expr);
+                    if actual_type != *expected_type {
+                        panic!(
+                            "Type mismatch for field {} in resource {}: expected {:?}, found {:?}",
+                            i, name, expected_type, actual_type
+                        );
+                    }
+
+                    if let Some(field_name) = field_name_opt {
+                        if let Field::Named(res_field_name, _) = resource_field {
+                            if field_name != res_field_name {
+                                panic!(
+                                    "Field name mismatch: expected '{}', found '{}'",
+                                    res_field_name, field_name
+                                );
+                            }
+                        } else {
+                            panic!(
+                                "Named field initialization for unnamed field in resource {}",
+                                name
+                            );
+                        }
+                    } else {
+                        if let Field::Named(_, _) = resource_field {
+                            panic!(
+                                "Unnamed field initialization for named field in resource {}",
+                                name
+                            );
+                        }
+                    }
+                }
+            } else {
+                panic!("Setup block should only contain Init statements");
+            }
+        }
+    }
+
     fn check_function(&self, global_context: &TypeContext, function: &Function) {
         let mut local_context = TypeContext {
             components: global_context.components.clone(),
             resources: global_context.resources.clone(),
             systems: global_context.systems.clone(),
             schedule: global_context.schedule.clone(),
+            setup: global_context.setup.clone(),
             functions: global_context.functions.clone(),
             variables: HashMap::new(),
         };
 
-        // adds parameters to context
         for Param {
             name,
             param_type,
@@ -427,15 +512,13 @@ impl TypeChecker {
         {
             local_context
                 .variables
-                .insert(name.clone(), (param_type.clone(), mutable.clone()));
+                .insert(name.clone(), (param_type.clone(), *mutable));
         }
 
-        // checks body
         for stmt in &function.body {
             self.check_stmt(&mut local_context, stmt);
         }
 
-        // checks return type
         let last_expr = function.body.last();
         if function.return_type != Type::Null {
             if let Some(Stmt::Expr(expr)) = last_expr {
@@ -473,11 +556,24 @@ impl TypeChecker {
 
             Stmt::Expr(expr) => self.check_expr(context, expr),
 
-            Stmt::System(_) => (), // Déjà géré
+            Stmt::System(_) => (),
 
-            Stmt::Function(_) => (), // Déjà géré
+            Stmt::Function(_) => (),
+
+            Stmt::Init { name, fields } => self.check_resource_init(context, name, fields),
 
             _ => panic!("Unsupported statement: {:?}", stmt),
+        }
+    }
+
+    fn check_resource_init(
+        &self,
+        context: &mut TypeContext,
+        name: &str,
+        fields: &[(Option<String>, Expr)],
+    ) {
+        for (_, expr) in fields {
+            self.check_expr(context, expr);
         }
     }
 
@@ -547,7 +643,6 @@ impl TypeChecker {
             );
         }
 
-        // Vérifier que l'opération est valide pour le type
         if target_type != Type::Int {
             panic!("Compound operations only supported for integers");
         }
