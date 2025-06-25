@@ -298,7 +298,7 @@ schedule {
 }
 
 #[test]
-fn test_parse_ressources_default_value() {
+fn test_parse_setup() {
     let statements = parse(
         "
 setup {
@@ -321,7 +321,7 @@ setup {
         vec![
             Stmt::Init {
                 name: "SpawnValue".into(),
-                fields: vec![(None, Expr::Number(1)),]
+                fields: vec![(None, Expr::Number(0)),]
             },
             Stmt::Init {
                 name: "Example".into(),

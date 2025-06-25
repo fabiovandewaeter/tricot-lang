@@ -26,6 +26,8 @@ pub enum Token {
     System,
     #[token("schedule")]
     Schedule,
+    #[token("setup")]
+    Setup,
     #[token("seq")]
     Sequential,
     #[token("par")]

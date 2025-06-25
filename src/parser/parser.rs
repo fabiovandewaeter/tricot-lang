@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     lexer::Token,
-    parser::ast::Schedule,
+    parser::ast::{Schedule, Setup},
     types::types::{ParamContext, Type},
 };
 
@@ -55,6 +55,7 @@ impl Parser {
             Some(Token::Component) => self.parse_component(),
             Some(Token::Resource) => self.parse_resource(),
             Some(Token::System) => self.parse_system(),
+            Some(Token::Setup) => self.parse_setup(),
             Some(Token::Schedule) => self.parse_schedule(),
             Some(Token::Fn) => self.parse_function(),
             Some(Token::Let) => self.parse_variable_declaration(),
@@ -136,6 +137,87 @@ impl Parser {
         };
 
         Stmt::System(system)
+    }
+
+    fn parse_setup(&mut self) -> Stmt {
+        self.expect(Token::Setup); // Correction: utiliser Setup au lieu de Schedule
+        self.expect(Token::CurlyBraceOpen);
+
+        let mut resources_init = Vec::new();
+
+        // Vérifie si le bloc est vide
+        if self.peek() == Some(&Token::CurlyBraceClose) {
+            self.next();
+            return Stmt::Setup(Setup { body: Vec::new() });
+        }
+
+        loop {
+            match self.peek() {
+                Some(Token::Identifier(_)) => {
+                    let resource_name = self.expect_identifier("resource name");
+                    let field_values = self.parse_field_initialization_values(); // Nouvelle fonction
+                    resources_init.push((resource_name, field_values));
+                }
+                other => {
+                    panic!(
+                        "Dans le bloc `setup`, on attendait un identifiant de ressource, trouvé {:?}",
+                        other
+                    );
+                }
+            }
+
+            if self.consume_if(Token::Comma) {
+                // Vérifie si après la virgule c'est la fin du bloc
+                if self.peek() == Some(&Token::CurlyBraceClose) {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        self.expect(Token::CurlyBraceClose);
+
+        // Construire les instructions d'initialisation
+        let body = resources_init
+            .into_iter()
+            .map(|(name, fields)| Stmt::Init { name, fields })
+            .collect();
+
+        Stmt::Setup(Setup { body })
+    }
+
+    // Nouvelle fonction pour parser les valeurs d'initialisation
+    fn parse_field_initialization_values(&mut self) -> Vec<(Option<String>, Expr)> {
+        self.expect(Token::CurlyBraceOpen);
+        let mut fields = Vec::new();
+
+        while self.peek() != Some(&Token::CurlyBraceClose) {
+            // Champ nommé: "ident: expr"
+            if let Some(Token::Identifier(_)) = self.peek() {
+                if let Some(Token::Colon) = self.tokens.get(self.pos + 1) {
+                    let field_name = self.expect_identifier("field name");
+                    self.expect(Token::Colon);
+                    let expr = self.parse_expression(0);
+                    fields.push((Some(field_name), expr));
+                    if !self.consume_if(Token::Comma) {
+                        break;
+                    }
+                    continue;
+                }
+            }
+
+            // Champ non nommé (expression simple)
+            let expr = self.parse_expression(0);
+            fields.push((None, expr));
+
+            if !self.consume_if(Token::Comma) {
+                break;
+            }
+        }
+
+        self.expect(Token::CurlyBraceClose);
+        fields
     }
 
     fn parse_schedule(&mut self) -> Stmt {
