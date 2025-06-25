@@ -269,8 +269,9 @@ fn test_parse_system_using_resource() {
 #[test]
 fn test_parse_schedule() {
     let statements = parse(
-        "schedule {
-    physics_update,
+        "
+schedule {
+    once(physics_update),
     health_system
 }",
     );
@@ -284,8 +285,51 @@ fn test_parse_schedule() {
     assert_eq!(
         schedule.body,
         vec![
-            Stmt::Expr(Expr::Identifier("physics_update".into())),
-            Stmt::Expr(Expr::Identifier("health_system".into())),
+            Stmt::Expr(Expr::CallSystem {
+                callee: Box::new(Expr::Identifier("physics_update".into())),
+                once: true
+            }),
+            Stmt::Expr(Expr::CallSystem {
+                callee: Box::new(Expr::Identifier("health_system".into())),
+                once: false
+            }),
+        ],
+    );
+}
+
+#[test]
+fn test_parse_ressources_default_value() {
+    let statements = parse(
+        "
+setup {
+    SpawnValue {0},
+    Example {a: 1, b: \"example\"},
+}",
+    );
+
+    assert_eq!(statements.len(), 1);
+
+    let Stmt::Setup(declared_resources) = &statements[0] else {
+        panic!(
+            "Should have been a Stmt::DeclaredResources: {:?}",
+            statements[0]
+        );
+    };
+
+    assert_eq!(
+        declared_resources.body,
+        vec![
+            Stmt::Init {
+                name: "SpawnValue".into(),
+                fields: vec![(None, Expr::Number(1)),]
+            },
+            Stmt::Init {
+                name: "Example".into(),
+                fields: vec![
+                    (Some("a".into()), Expr::Number(1)),
+                    (Some("b".into()), Expr::StringLiteral("example".into()))
+                ]
+            },
         ],
     );
 }

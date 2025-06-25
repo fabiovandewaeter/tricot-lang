@@ -34,6 +34,8 @@ pub enum Token {
     Using,
     #[token("spawn")]
     Spawn,
+    #[token("once")]
+    Once,
 
     #[token("fn")]
     Fn,

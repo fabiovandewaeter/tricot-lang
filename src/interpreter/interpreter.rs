@@ -1,8 +1,5 @@
+use crate::{ecs::ecs::World, parser::ast::*, types::types::Type, values::Value};
 use std::collections::{HashMap, HashSet};
-
-use crate::{
-    interpreter::ecs_registry::EcsRegistry, parser::ast::*, types::types::Type, values::Value,
-};
 
 pub struct Interpreter {
     global_env: HashMap<String, Value>,
@@ -11,8 +8,10 @@ pub struct Interpreter {
     systems: HashMap<String, System>,
     schedule: Option<Schedule>,
     functions: HashMap<String, Function>,
-    ecs_registry: EcsRegistry,
     saved_variables_for_tests: HashMap<String, Value>,
+    world: World,
+    // tracker les systèmes exécutés for systems that should only be called once
+    executed_systems: HashSet<String>,
 }
 
 impl Interpreter {
@@ -24,68 +23,75 @@ impl Interpreter {
             systems: HashMap::new(),
             schedule: None,
             functions: HashMap::new(),
-            ecs_registry: EcsRegistry::new(),
             saved_variables_for_tests: HashMap::new(),
+            world: World::new(),
+            executed_systems: HashSet::new(),
         }
     }
 
-    pub fn run(&mut self, prog: Program, infinite_loop: bool) {
-        // Register functions first
+    /// scheduler_loops: -1 for infinite loop
+    pub fn run(&mut self, prog: Program, mut scheduler_loops: i32) {
         for stmt in &prog.statements {
             match stmt {
                 Stmt::Component(comp) => {
                     self.components.insert(comp.name.clone(), comp.clone());
                 }
-
                 Stmt::System(system) => {
                     self.systems.insert(system.name.clone(), system.clone());
                 }
-
                 Stmt::Schedule(schedule) => {
                     self.schedule = Some(schedule.clone());
                 }
-
                 Stmt::Function(func) => {
                     self.functions.insert(func.name.clone(), func.clone());
                 }
-
                 _ => (),
             }
         }
 
-        // Execute statements
         for stmt in prog.statements {
             match stmt {
                 Stmt::Function(_) | Stmt::Component(_) | Stmt::System(_) | Stmt::Schedule(_) => {}
-
-                Stmt::Schedule(schedule) => self.run_schedule(&schedule),
-
-                _ => {
-                    self.run_stmt(stmt);
-                }
+                _ => self.run_stmt(stmt),
             }
         }
 
-        if let Some(schedule) = self.schedule.clone() {
-            if infinite_loop {
-                while true {
-                    self.run_schedule(&schedule);
+        if let Some(mut schedule) = self.schedule.clone() {
+            if scheduler_loops < 0 {
+                loop {
+                    self.run_schedule(&mut schedule);
                 }
             } else {
-                self.run_schedule(&schedule);
+                while scheduler_loops > 0 {
+                    self.run_schedule(&mut schedule);
+                    scheduler_loops -= 1;
+                }
             }
         }
     }
 
-    fn run_schedule(&mut self, schedule: &Schedule) {
+    fn run_schedule(&mut self, schedule: &mut Schedule) {
         for stmt in &schedule.body {
-            if let Stmt::Expr(Expr::Identifier(called_system)) = stmt {
-                self.call_system(&called_system);
+            if let Stmt::Expr(Expr::CallSystem { callee, once }) = stmt {
+                if let Expr::Identifier(called_system) = &**callee {
+                    if *once {
+                        // Vérifier dans l'état global de l'interpréteur
+                        if !self.executed_systems.contains(called_system) {
+                            self.call_system(called_system);
+                            // Mettre à jour l'état global
+                            self.executed_systems.insert(called_system.to_string());
+                        }
+                    } else {
+                        self.call_system(called_system);
+                    }
+                } else {
+                    panic!("Expected identifier as callee, got: {:?}", callee);
+                }
             } else {
                 panic!(
-                    "Expected an identifier expression to call a system in the schedule body, but found: {:?}",
+                    "Expected a system call expression in schedule body, got: {:?}",
                     stmt
-                )
+                );
             }
         }
     }
@@ -93,20 +99,15 @@ impl Interpreter {
     fn run_stmt(&mut self, stmt: Stmt) {
         match stmt {
             Stmt::Let {
-                mutable: _,
-                name,
-                expression,
-                ..
+                name, expression, ..
             } => {
                 let val = self.eval_expr(expression);
                 self.set_variable(&name, val);
             }
-
             Stmt::Assignment { target, expression } => {
                 let rhs = self.eval_expr(expression);
                 self.assign_target(target, rhs);
             }
-
             Stmt::CompoundAssignment {
                 target,
                 op,
@@ -115,31 +116,23 @@ impl Interpreter {
                 let rhs = self.eval_expr(expression);
                 self.compound_assign(target, op, rhs);
             }
-
             Stmt::Expr(expr) => {
                 let val = self.eval_expr(expr);
                 if self.stack.len() == 1 {
-                    // Top-level only
                     println!("=> {:?}", val);
                 }
             }
-
-            _ => {} // Ignore other statement types
+            _ => {}
         }
     }
 
     fn eval_expr(&mut self, expr: Expr) -> Value {
         match expr {
             Expr::Number(n) => Value::Int(n),
-
             Expr::Identifier(name) => self.get_variable(&name),
-
             Expr::StringLiteral(s) => Value::String(s),
-
             Expr::UnaryOp { op, expr } => self.eval_unary_op(op, *expr),
-
             Expr::BinaryOp { left, op, right } => self.eval_binary_op(*left, op, *right),
-
             Expr::Call { callee, args } => {
                 if let Expr::Identifier(name) = *callee {
                     self.call_function(&name, args)
@@ -147,51 +140,41 @@ impl Interpreter {
                     panic!("Cannot call non-identifier expression");
                 }
             }
-
             Expr::Spawn(inits) => self.eval_spawn(&inits),
+            Expr::CallSystem { callee: _, once: _ } => unreachable!(),
         }
     }
 
-    // Helper functions
     pub fn get_variable(&self, name: &str) -> Value {
-        // Search stack frames (top to bottom)
         for env in self.stack.iter().rev() {
             if let Some(val) = env.get(name) {
                 return val.clone();
             }
         }
-
-        // Search global environment
-        if let Some(val) = self.global_env.get(name) {
-            return val.clone();
-        }
-
-        panic!("Undefined identifier: {}", name)
+        self.global_env
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| panic!("Undefined identifier: {}", name))
     }
 
     fn set_variable(&mut self, name: &str, value: Value) {
-        // If in function, set in current stack frame
         if self.stack.len() > 1 {
             if let Some(env) = self.stack.last_mut() {
                 env.insert(name.to_string(), value);
                 return;
             }
         }
-
-        // Otherwise set in global
         self.global_env.insert(name.to_string(), value);
     }
 
     fn get_variable_skip(&self, name: &str, skip: usize) -> Value {
         let stack_len = self.stack.len();
         if skip >= stack_len {
-            // After skipping, only global remains
             self.global_env
                 .get(name)
                 .cloned()
                 .unwrap_or_else(|| panic!("Undefined variable: {}", name))
         } else {
-            // Skip the top 'skip' frames
             for env in self.stack.iter().rev().skip(skip) {
                 if let Some(val) = env.get(name) {
                     return val.clone();
@@ -207,20 +190,17 @@ impl Interpreter {
     fn update_variable_skip(&mut self, name: &str, value: Value, skip: usize) {
         let stack_len = self.stack.len();
         if skip >= stack_len {
-            // Update global variable
             if self.global_env.contains_key(name) {
                 self.global_env.insert(name.to_string(), value);
                 return;
             }
         } else {
-            // Skip the top 'skip' frames
             for env in self.stack.iter_mut().rev().skip(skip) {
                 if env.contains_key(name) {
                     env.insert(name.to_string(), value.clone());
                     return;
                 }
             }
-            // Update global
             if self.global_env.contains_key(name) {
                 self.global_env.insert(name.to_string(), value);
                 return;
@@ -232,7 +212,6 @@ impl Interpreter {
     fn assign_target(&mut self, target: Expr, value: Value) {
         match target {
             Expr::Identifier(name) => self.set_variable(&name, value),
-
             Expr::UnaryOp {
                 op: UnaryOp::Deref,
                 expr,
@@ -253,7 +232,6 @@ impl Interpreter {
                     panic!("Cannot dereference non-reference value");
                 }
             }
-
             Expr::BinaryOp {
                 left,
                 op: BinaryOp::Dot,
@@ -264,35 +242,26 @@ impl Interpreter {
                     Expr::Identifier(name) => name,
                     _ => panic!("Field name must be an identifier"),
                 };
-
-                // Get the base value (component instance)
                 let mut base_value = self.eval_expr(base_expr.clone());
-
-                // Update the field in the component instance
                 if let Value::ComponentInstance { name, mut fields } = base_value {
                     fields.insert(field_name, value);
                     base_value = Value::ComponentInstance { name, fields };
+                    self.assign_target(base_expr, base_value);
                 } else {
                     panic!("Cannot assign field to non-component instance");
                 }
-
-                // Assign the updated component back to the base
-                self.assign_target(base_expr, base_value);
             }
-
             _ => panic!("Invalid assignment target"),
         }
     }
 
     fn compound_assign(&mut self, target: Expr, op: BinaryOp, rhs: Value) {
-        // Handle field access separately
         if let Expr::BinaryOp {
             left,
             op: BinaryOp::Dot,
             right,
         } = target
         {
-            // Evaluate the current value of the field
             let field_expr = Expr::BinaryOp {
                 left: left.clone(),
                 op: BinaryOp::Dot,
@@ -300,8 +269,6 @@ impl Interpreter {
             };
             let current_value = self.eval_expr(field_expr);
             let new_value = self.apply_binary_op(current_value, op, rhs);
-
-            // Assign the new value to the field
             self.assign_target(
                 Expr::BinaryOp {
                     left,
@@ -313,13 +280,8 @@ impl Interpreter {
             return;
         }
 
-        // Handle other cases
         let (current_value, name, depth_at_creation, mutable) = match target {
-            Expr::Identifier(name) => {
-                let val = self.get_variable(&name);
-                (val, name, 0, true)
-            }
-
+            Expr::Identifier(name) => (self.get_variable(&name), name, 0, true),
             Expr::UnaryOp {
                 op: UnaryOp::Deref,
                 expr,
@@ -331,9 +293,6 @@ impl Interpreter {
                     mutable,
                 } = ref_value
                 {
-                    if !mutable {
-                        panic!("Cannot assign through immutable reference");
-                    }
                     let skip = self.stack.len() - depth_at_creation;
                     let val = self.get_variable_skip(&name, skip);
                     (val, name, depth_at_creation, mutable)
@@ -341,12 +300,10 @@ impl Interpreter {
                     panic!("Cannot dereference non-reference value");
                 }
             }
-
             other => panic!("Invalid compound assignment target: {:?}", other),
         };
 
         let new_value = self.apply_binary_op(current_value, op, rhs);
-
         match (name, depth_at_creation, mutable) {
             (name, 0, _) => self.set_variable(&name, new_value),
             (name, depth, _) => {
@@ -370,7 +327,6 @@ impl Interpreter {
                     panic!("Cannot take address of non-identifier");
                 }
             }
-
             UnaryOp::Deref => {
                 let value = self.eval_expr(expr);
                 if let Value::Reference {
@@ -391,7 +347,6 @@ impl Interpreter {
     fn eval_binary_op(&mut self, left: Expr, op: BinaryOp, right: Expr) -> Value {
         match op {
             BinaryOp::Dot => {
-                // Handle field access on component instances
                 let base_value = self.eval_expr(left);
                 match base_value {
                     Value::ComponentInstance { fields, .. } => {
@@ -416,70 +371,36 @@ impl Interpreter {
     }
 
     fn eval_spawn(&mut self, inits: &Vec<Expr>) -> Value {
-        // 1. Construire la liste des composants à attacher
-        //    -> Vec<(nom_du_composant, valeur_composant)>
-        let mut components_to_insert: Vec<(String, Value)> = Vec::new();
+        let mut components_to_insert = Vec::new();
 
         for init_expr in inits {
-            // Chaque `init_expr` doit être un `Expr::Call { callee, args }`
             let (comp_name, args) = match init_expr {
                 Expr::Call { callee, args } => {
-                    // Vérifier que `callee` est un identifiant
                     if let Expr::Identifier(name) = &**callee {
                         (name.clone(), args)
                     } else {
-                        panic!(
-                            "Dans spawn, attendu un constructeur de composant (Ident), mais trouvé : {:?}",
-                            callee
-                        );
+                        panic!("Expected component constructor identifier");
                     }
                 }
-                other => panic!(
-                    "Chaque élément de `spawn {{ … }}` doit être un appel de composant. Trouvé : {:?}",
-                    other
-                ),
+                _ => panic!("Invalid spawn syntax"),
             };
 
-            // 2. Vérifier que ce composant existe bien dans l'AST (self.components)
             let comp_def = self
                 .components
                 .get(&comp_name)
-                .cloned()
-                .unwrap_or_else(|| panic!("Composant inconnu : {}", comp_name));
+                .unwrap_or_else(|| panic!("Unknown component: {}", comp_name))
+                .clone();
 
-            // 3. Evaluer chaque argument pour obtenir un Value
-            if args.len() != comp_def.fields.len() {
-                panic!(
-                    "Le composant '{}' attend {} champ(s), mais le spawn en fournit {}",
-                    comp_name,
-                    comp_def.fields.len(),
-                    args.len()
-                );
-            }
-
-            // 4. Construire `field_values: HashMap<String, Value>`
-            let mut field_values: HashMap<String, Value> = HashMap::new();
+            let mut field_values = HashMap::new();
             for (i, arg_expr) in args.iter().enumerate() {
-                // On évalue l'argument
                 let val = self.eval_expr(arg_expr.clone());
-
-                // On récupère le nom du i-ème champ dans la définition AST du composant
                 let field_name = match &comp_def.fields[i] {
-                    Field::Named(fname, _ty) => fname.clone(),
-                    Field::Unnamed(_) => {
-                        panic!(
-                            "Dans votre définition de composant '{}', il y a des champs Unnamed. \
-                             Pour spawn, tous les champs doivent être `Field::Named`.",
-                            comp_name
-                        )
-                    }
+                    Field::Named(name, _) => name.clone(),
+                    Field::Unnamed(_) => panic!("Unnamed fields not supported in spawn"),
                 };
-
-                // On associe le nom du champ à la valeur évaluée
                 field_values.insert(field_name, val);
             }
 
-            // 5. Créer un `Value::ComponentInstance` et l'ajouter à la liste
             let instance = Value::ComponentInstance {
                 name: comp_name.clone(),
                 fields: field_values,
@@ -487,11 +408,60 @@ impl Interpreter {
             components_to_insert.push((comp_name.clone(), instance));
         }
 
-        // 6. Appeler `spawn_entity` dans l'EcsRegistry
-        let new_id = self.ecs_registry.spawn_entity(components_to_insert);
+        let new_id = self.world.spawn();
+        for (comp_name, value) in components_to_insert {
+            self.world.add_component(new_id, comp_name, value);
+        }
 
-        // 7. Retourner l'ID sous forme d'entier
         Value::Int(new_id as i64)
+    }
+
+    fn call_system(&mut self, name: &str) {
+        let system = self.systems.get(name).unwrap().clone();
+
+        if system.params.is_empty() {
+            self.stack.push(HashMap::new());
+            for stmt in &system.body {
+                self.run_stmt(stmt.clone());
+            }
+            self.stack.pop();
+            return;
+        }
+
+        let component_names: Vec<&str> = system
+            .params
+            .iter()
+            .map(|param| match &param.param_type {
+                Type::Component(name) => name.as_str(),
+                _ => panic!("System parameter must be a component"),
+            })
+            .collect();
+
+        let matching_entities = self.world.query_entities(&component_names);
+
+        for entity_id in matching_entities {
+            let mut frame = HashMap::new();
+
+            for param in &system.params {
+                let comp_name = match &param.param_type {
+                    Type::Component(name) => name,
+                    _ => unreachable!(),
+                };
+
+                if let Some(comp_value) =
+                    self.world.get_component_mut(entity_id, comp_name.as_str())
+                {
+                    frame.insert(param.name.clone(), comp_value.clone());
+                }
+            }
+
+            self.stack.push(frame);
+            for stmt in &system.body {
+                self.run_stmt(stmt.clone());
+            }
+            self.update_components(entity_id, &system);
+            self.stack.pop();
+        }
     }
 
     fn apply_binary_op(&self, left: Value, op: BinaryOp, right: Value) -> Value {
@@ -506,101 +476,28 @@ impl Interpreter {
                 };
                 Value::Int(result)
             }
-
             (Value::String(l), Value::String(r)) if op == BinaryOp::Plus => {
                 Value::String(format!("{}{}", l, r))
             }
-
             _ => panic!("Type mismatch or unsupported operation"),
         }
     }
 
-    fn call_system(&mut self, name: &str) {
-        let system = self
-            .systems
-            .get(name)
-            .expect(&format!("Undefined system: {}", name))
-            .clone();
-
-        // if no parameters in query, execute only one time
-        if system.params.is_empty() {
-            // On pousse un frame vide (le système n’a pas de variables liées à une entité)
-            self.stack.push(HashMap::new());
-            for stmt in &system.body {
-                self.run_stmt(stmt.clone());
-            }
-            self.stack.pop();
-            return;
-        }
-
-        // else, find corresponding components
-        let component_types: Vec<&str> = system
-            .params
-            .iter()
-            .map(|p| match &p.param_type {
-                Type::Component(name) => name.as_str(),
-                other => panic!("Type not found: {:?}", other),
-            })
-            .collect();
-
-        let mut matching_entities = self.find_entities_with_components(&component_types);
-
-        // execute system on entities
-        for entity_id in matching_entities {
-            let mut frame = HashMap::new();
-
-            for param in &system.params {
-                let comp_name = match &param.param_type {
-                    Type::Component(name) => name,
-                    _ => unreachable!(),
-                };
-
-                if let Some(comp_value) = self.ecs_registry.get_component_mut(entity_id, comp_name)
-                {
-                    frame.insert(param.name.clone(), comp_value.clone());
-                }
-            }
-
-            self.stack.push(frame);
-            //self.run_system_body(&system.body);
-            for stmt in &system.body {
-                self.run_stmt(stmt.clone());
-            }
-
-            self.update_components(entity_id, &system);
-            self.stack.pop();
-        }
-    }
-
-    // Trouve les entités ayant tous les composants requis
-    fn find_entities_with_components(&self, component_types: &[&str]) -> HashSet<u64> {
-        let mut result = HashSet::new();
-
-        if let Some(first_type) = component_types.first() {
-            if let Some(entities) = self.ecs_registry.components.get(*first_type) {
-                result.extend(entities.keys().cloned());
-            }
-
-            for comp_type in &component_types[1..] {
-                if let Some(entities) = self.ecs_registry.components.get(*comp_type) {
-                    result.retain(|id| entities.contains_key(id));
-                }
-            }
-        }
-
-        result
-    }
-
-    // updates components after running the system
     fn update_components(&mut self, entity_id: u64, system: &System) {
         for param in &system.params {
             if param.mutable {
+                // Récupère le nom du COMPOSANT (ex: "Position")
+                let comp_name = match &param.param_type {
+                    Type::Component(name) => name,
+                    _ => panic!("Paramètre non-composant"),
+                };
+
                 if let Value::ComponentInstance { fields, .. } = self.get_variable(&param.name) {
-                    if let Some(comp_value) =
-                        self.ecs_registry.get_component_mut(entity_id, &param.name)
-                    {
+                    // Utilise comp_name pour le monde
+                    if let Some(comp_value) = self.world.get_component_mut(entity_id, comp_name) {
+                        // ✅
                         *comp_value = Value::ComponentInstance {
-                            name: param.name.clone(),
+                            name: comp_name.clone(), // ✅
                             fields: fields.clone(),
                         };
                     }
@@ -630,7 +527,6 @@ impl Interpreter {
             let value = self.eval_expr(args[1].clone());
             self.save_for_variable_tests(variable_name, value);
         }
-
         Value::Null
     }
 
@@ -641,24 +537,13 @@ impl Interpreter {
             .unwrap_or_else(|| panic!("Undefined function: {}", name))
             .clone();
 
-        // Evaluate arguments
         let evaluated_args: Vec<Value> = args.into_iter().map(|arg| self.eval_expr(arg)).collect();
-
-        // Create new stack frame
         let mut frame = HashMap::new();
-        for (
-            Param {
-                name,
-                mutable,
-                param_type,
-            },
-            value,
-        ) in func.params.iter().zip(evaluated_args.iter())
-        {
-            frame.insert(name.clone(), value.clone());
+
+        for (param, value) in func.params.iter().zip(evaluated_args.iter()) {
+            frame.insert(param.name.clone(), value.clone());
         }
 
-        // Execute function body
         self.stack.push(frame);
         let mut result = Value::Null;
 
@@ -674,7 +559,6 @@ impl Interpreter {
         result
     }
 
-    // ------------ for tests ------------
     pub fn save_for_variable_tests(&mut self, variable_name: String, value: Value) {
         self.saved_variables_for_tests.insert(variable_name, value);
     }

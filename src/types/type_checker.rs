@@ -30,22 +30,17 @@ impl TypeContext {
     fn infer_type(&self, expression: &Expr) -> Type {
         match expression {
             Expr::Number(_) => Type::Int,
-
             Expr::StringLiteral(_) => Type::String,
-
             Expr::Identifier(name) => self
                 .variables
                 .get(name)
                 .map(|(ty, _)| ty.clone())
                 .unwrap_or_else(|| panic!("Undefined variable: {}", name)),
-
             Expr::UnaryOp { op, expr } => self.infer_unary_type(op, expr),
-
             Expr::BinaryOp { left, op, right } => self.infer_binary_type(left, op, right),
-
             Expr::Call { callee, args } => self.infer_call_type(callee, args),
-
             Expr::Spawn(component_inits) => self.check_entity_spawn(component_inits),
+            Expr::CallSystem { callee, once } => todo!(),
         }
     }
 
@@ -388,10 +383,18 @@ impl TypeChecker {
         for stmt in &schedule.body {
             match stmt {
                 Stmt::Expr(expr) => match expr {
-                    Expr::Identifier(callee_name) => {
-                        local_context.systems.get(callee_name).unwrap_or_else(|| {
-                            panic!("Calls a system that does not exist: {:?}", callee_name);
-                        });
+                    Expr::CallSystem { callee, once: _ } => {
+                        // On s’assure que le callee est bien un Identifier
+                        if let Expr::Identifier(callee_name) = &**callee {
+                            local_context.systems.get(callee_name).unwrap_or_else(|| {
+                                panic!("Calls a system that does not exist: {:?}", callee_name);
+                            });
+                        } else {
+                            panic!(
+                                "Le callee de CallSystem doit être un Identifier, trouvé: {:?}",
+                                callee
+                            );
+                        }
                     }
 
                     other => panic!(

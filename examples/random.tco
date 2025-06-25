@@ -32,6 +32,9 @@ print(a)
 
 comp Position(x: Int, y: Int)
 comp Velocity(dx: Int, dy: Int)
+comp Health(Int)
+
+res SpawnCount(Int)
 
 sys move_entities(position: mut Position, velocity: Velocity) {
     position.x += velocity.dx
@@ -41,14 +44,22 @@ sys move_entities(position: mut Position, velocity: Velocity) {
     print(position.y)
 }
 
-sys entity_spawner() {
+sys entity_spawner() using (spawn_count: mut SpawnCount) {
     let id = spawn {
         Position(0, 0),
-        Velocity(1, 2)
+        Velocity(1, 1)
     }
+
+    print(spawn_count)
+    spawn_count += 1
+    print(spawn_count)
+}
+
+setup {
+    SpawnCount {0},
 }
 
 schedule {
-    entity_spawner,
+    once(entity_spawner),
     move_entities
 }

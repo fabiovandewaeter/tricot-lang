@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{
     lexer::Token,
     parser::ast::Schedule,
@@ -138,44 +140,69 @@ impl Parser {
 
     fn parse_schedule(&mut self) -> Stmt {
         self.expect(Token::Schedule);
-
         self.expect(Token::CurlyBraceOpen);
-        let mut systems = Vec::new();
+
+        // On va stocker (nom_de_sys, once_flag)
+        let mut systems: Vec<(String, bool)> = Vec::new();
+
         loop {
             match self.peek() {
+                // Cas `once(sys_name)`
+                Some(Token::Once) => {
+                    self.next(); // consomme `once`
+                    self.expect(Token::ParenthesisOpen); // consomme `(`
+                    // on s’attend à un identifiant
+                    let sys_name = if let Some(Token::Identifier(name)) = self.peek() {
+                        let name = name.clone();
+                        self.next();
+                        name
+                    } else {
+                        panic!(
+                            "Après `once(`, on attendait un identifiant de système, trouvé {:?}",
+                            self.peek()
+                        );
+                    };
+                    self.expect(Token::ParenthesisClose); // consomme `)`
+                    systems.push((sys_name, true));
+                }
+
+                // Cas simple `sys_name`
                 Some(Token::Identifier(name)) => {
-                    // On consomme l’identifiant et on le stocke
                     let sys_name = name.clone();
                     self.next();
-                    systems.push(sys_name);
+                    systems.push((sys_name, false));
                 }
+
                 other => {
                     panic!(
-                        "Dans le bloc `schedule`, on attendait un identifiant de système, trouvé {:?}",
+                        "Dans le bloc `schedule`, on attendait `once(...)` ou un identifiant, trouvé {:?}",
                         other
                     );
                 }
             }
 
-            // Si on trouve une virgule, on la consomme et on continue la boucle
+            // Virgule facultative
             if self.consume_if(Token::Comma) {
                 continue;
             } else {
-                // Sinon, on sort de la boucle (fin de liste)
                 break;
             }
         }
+
         self.expect(Token::CurlyBraceClose);
 
-        // create Scredule body
-        let mut body = Vec::new();
-        for name in systems {
-            // Ici, on crée un expr « entity_spawner » ou « move_entities »
-            let expr_ident = Expr::Identifier(name);
-            body.push(Stmt::Expr(expr_ident));
-        }
+        // construire le corps avec des Expr::CallSystem
+        let body = systems
+            .into_iter()
+            .map(|(name, once)| {
+                Stmt::Expr(Expr::CallSystem {
+                    callee: Box::new(Expr::Identifier(name)),
+                    once,
+                })
+            })
+            .collect();
 
-        Stmt::Schedule(Schedule { body: body })
+        Stmt::Schedule(Schedule { body })
     }
     // ---------------------------------------
 

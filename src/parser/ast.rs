@@ -18,13 +18,17 @@ pub enum Expr {
         callee: Box<Expr>, // an Identifier
         args: Vec<Expr>,
     },
+    CallSystem {
+        callee: Box<Expr>, // an Identifier
+        once: bool,        // executed only once
+    },
     Spawn(Vec<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
     Deref, // `*expr`
-    /// mutable
+    /// bool for mutable
     AddrOf(bool), // `&expr`
 }
 
@@ -68,11 +72,18 @@ pub enum Stmt {
         op: BinaryOp,
         expression: Expr,
     },
+    // for Resources initialization etc.
+    Init {
+        name: String,
+        fields: Vec<(Option<String>, Expr)>,
+    },
     Function(Function),
     Component(Component),
     Resource(Resource),
     System(System),
     Schedule(Schedule),
+    // where all Init are
+    Setup(Setup),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -129,6 +140,11 @@ pub struct System {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Schedule {
+    pub body: Vec<Stmt>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Setup {
     pub body: Vec<Stmt>,
 }
 
